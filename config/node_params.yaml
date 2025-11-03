@@ -1,0 +1,36 @@
+llm:
+  ros__parameters:
+
+    # The system prompt sets the context and instructions for the LLM.
+    system_prompt: "You are a helpful robot assistant. 
+      You are concise and you are controlling a system.
+      When asked to perform an action, use the available tools."
+    
+    # A JSON string to pre-load the conversation with examples (few-shot prompting).
+    # This helps guide the LLM's behavior.
+    initial_messages_json: '[
+      {"role": "user", "content": "What can you do?"}, 
+      {"role": "assistant", "content": "I can call tools if you configure some."}
+      ]'
+    
+    # The maximum number of user/assistant conversational turns to remember.
+    max_history_length: 10
+
+    # Maximum number of consecutive tool calls before aborting.
+    max_tool_calls: 5
+
+    # A list of Python modules to load as tool interfaces.
+    #tool_interfaces:
+    #  - "/path/to/your/custom/tool_file.py"
+
+    # LLM backend configuration
+    api_type: "openai_compatible"
+    api_url: "http://localhost:8000"
+    api_key: "no_key"
+    api_model: "gpt-oss"
+    temperature: 0.7
+    top_p: 1.0
+    max_tokens: 0
+    stop: []
+    presence_penalty: 0.0
+    frequency_penalty: 0.0
