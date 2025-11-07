@@ -1,10 +1,11 @@
-llm:
+/**/llm:
   ros__parameters:
 
     # The system prompt sets the context and instructions for the LLM.
     system_prompt: "You are a helpful robot assistant. 
       You are concise and you are controlling a system.
-      When asked to perform an action, use the available tools."
+      When asked to perform an action, use the available tools.
+      Dont present simulated results if you didnt get a tool response. Instead tell that there were no response."
     
     # A JSON string to pre-load the conversation with examples (few-shot prompting).
     # This helps guide the LLM's behavior.
@@ -14,12 +15,12 @@ llm:
       ]'
     
     # The maximum number of user/assistant conversational turns to remember.
-    max_history_length: 10
+    max_history_length: 30
 
     # Maximum number of consecutive tool calls before aborting.
-    max_tool_calls: 5
+    max_tool_calls: 20
 
-    # A list of Python modules to load as tool interfaces.
+    # A list of Python modules to load as tool interfaces. By default example tools are loaded.
     #tool_interfaces:
     #  - "/path/to/your/custom/tool_file.py"
 
