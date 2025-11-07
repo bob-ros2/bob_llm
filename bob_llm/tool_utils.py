@@ -25,7 +25,7 @@ TYPE_MAP = {
     bool: "boolean",
 }
 
-def register(module: Any) -> List[Tool]:
+def register(module: Any, node: Any = None) -> List[Tool]:
     """
     Inspects a module and builds a list of OpenAI-compatible tool definitions
     from its functions. It ignores functions starting with '_' and 'register'.
