@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 A tool interface for the LLM node providing ROS 2 CLI functionalities.
 
