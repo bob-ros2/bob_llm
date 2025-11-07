@@ -84,11 +84,12 @@ Robot status: Battery is at 85%. All systems are nominal. Currently idle.
 
 The node uses the following topics for communication:
 
-| Topic           | Type                  | Description                                                                    |
-| --------------- | --------------------- | ------------------------------------------------------------------------------ |
-| `/llm_prompt`   | `std_msgs/msg/String` | **(Subscribed)** Receives user prompts to be processed by the LLM.               |
-| `/llm_response` | `std_msgs/msg/String` | **(Published)** Publishes the final, complete response from the LLM.             |
-| `/llm_stream`   | `std_msgs/msg/String` | **(Published)** Publishes token-by-token chunks of the LLM's response if streaming is enabled. |
+| Topic             | Type                  | Description                                                                                                        |
+| ----------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `/llm_prompt`     | `std_msgs/msg/String` | **(Subscribed)** Receives user prompts to be processed by the LLM.                                                     |
+| `/llm_response`   | `std_msgs/msg/String` | **(Published)** Publishes the final, complete response from the LLM.                                                   |
+| `/llm_stream`     | `std_msgs/msg/String` | **(Published)** Publishes token-by-token chunks of the LLM's response if streaming is enabled.                           |
+| `/llm_latest_turn`| `std_msgs/msg/String` | **(Published)** Publishes the latest user/assistant turn as a JSON string: `[{"role": "user", ...}, {"role": "assistant", ...}]`. |
 
 
 ## Configuration
@@ -108,6 +109,7 @@ All parameters can be set via a YAML file, command-line arguments, or environmen
 | `system_prompt`           | string       | `""`                           | `LLM_SYSTEM_PROMPT`           | The system prompt to set the LLM's context, personality, and instructions.           |
 | `initial_messages_json`   | string       | `[]`                           | `LLM_INITIAL_MESSAGES_JSON`   | A JSON string of initial messages for few-shot prompting to guide the LLM.             |
 | `max_history_length`      | integer      | `10`                           | `LLM_MAX_HISTORY_LENGTH`      | Maximum number of user/assistant conversational turns to keep in history.              |
+| `message_log`             | string       | `""`                           | `LLM_MESSAGE_LOG`             | If set to a file path, appends each conversational turn to a persistent JSON log file. |
 | `stream`                  | bool         | `true`                         | `LLM_STREAM`                  | Enable or disable streaming for the final LLM response.                                |
 | `max_tool_calls`          | integer      | `5`                            | `LLM_MAX_TOOL_CALLS`          | Maximum number of consecutive tool calls before aborting to prevent loops.           |
 | `temperature`             | double       | `0.7`                          | `LLM_TEMPERATURE`             | Controls the randomness of the output. Lower is more deterministic.                    |
@@ -117,6 +119,30 @@ All parameters can be set via a YAML file, command-line arguments, or environmen
 | `presence_penalty`        | double       | `0.0`                          | `LLM_PRESENCE_PENALTY`        | Penalizes new tokens based on whether they appear in the text so far.                  |
 | `frequency_penalty`       | double       | `0.0`                          | `LLM_FREQUENCY_PENALTY`       | Penalizes new tokens based on their existing frequency in the text so far.             |
 | `tool_interfaces`         | string array | Path to `example_interface.py` | `LLM_TOOL_INTERFACES`         | A list of absolute paths to Python files containing tool functions. The node will attempt to load functions from each file path provided. |
+
+### Conversation Logging
+
+The node can optionally save the entire conversation to a JSON file, which is useful for debugging, analysis, or creating datasets for fine-tuning models.
+
+To enable logging, set the `message_log` parameter to an absolute file path (e.g., `/home/user/conversation.json`). The node will append each user prompt and the corresponding assistant response to this file. If the file does not exist, it will be created. On the first write to a new file, the `system_prompt` (if configured) will be automatically added as the first entry.
+
+The resulting file will be a flat JSON array of message objects, like this:
+```json
+[
+  {
+    "role": "system",
+    "content": "You are a helpful robot assistant."
+  },
+  {
+    "role": "user",
+    "content": "What is the status of the robot?"
+  },
+  {
+    "role": "assistant",
+    "content": "Robot status: Battery is at 85%. All systems are nominal. Currently idle."
+  }
+]
+```
 
 ## Tool System
 

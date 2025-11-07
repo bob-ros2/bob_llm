@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import yaml
 import json
 import traceback
 import importlib
@@ -11,6 +10,7 @@ from std_msgs.msg import String
 from rcl_interfaces.msg import ParameterDescriptor
 from rcl_interfaces.msg import ParameterType
 from rclpy.parameter import Parameter
+from rclpy.executors import MultiThreadedExecutor
 from ament_index_python.packages import get_package_share_directory
 from bob_llm.tool_utils import register as default_register
 from bob_llm.backend_clients import OpenAICompatibleClient
@@ -147,10 +147,18 @@ class LLMNode(Node):
                 description='A list of Python modules or file paths to load as tool interfaces.'
             )
         )
+        self.declare_parameter('message_log',
+            os.environ.get('LLM_MESSAGE_LOG', '/blue/dev/you/messages.json'),
+            ParameterDescriptor(
+                type=ParameterType.PARAMETER_STRING,
+                description='If set, appends each user/assistant turn to this JSON file.'
+            )
+        )
 
         self.chat_history = []
         self.load_llm_client()
         self._initialize_chat_history()
+        self._prefix_history_len = len(self.chat_history)
 
         # Load tools and their corresponding functions
         self.tools, self.tool_functions = self._load_tools()
@@ -166,6 +174,9 @@ class LLMNode(Node):
         self.pub_stream = self.create_publisher(
             String, 'llm_stream', 10)
 
+        self.pub_latest_turn = self.create_publisher(
+            String, 'llm_latest_turn', 10)
+            
         self.get_logger().info(
             f"Node is ready. History has {len(self.chat_history)} initial messages.")
 
@@ -272,10 +283,10 @@ class LLMNode(Node):
                 # Use the module's register function if it exists, otherwise use the default
                 if hasattr(module, 'register') and callable(getattr(module, 'register')):
                     self.get_logger().info(f"Using custom 'register' from {path_str}")
-                    tools = module.register(module)
+                    tools = module.register(module, self)
                 else:
                     self.get_logger().info(f"Using default 'register' for {path_str}")
-                    tools = default_register(module)
+                    tools = default_register(module, self)
 
                 all_tools.extend(tools)
 
@@ -292,28 +303,91 @@ class LLMNode(Node):
 
         return all_tools, all_functions
 
+    def _publish_latest_turn(self, user_prompt: str, assistant_message: dict):
+        """
+        Processes the latest conversational turn for publishing and logging.
+
+        Args:
+            user_prompt: The string content of the user's latest prompt.
+            assistant_message: The final message dictionary from the assistant,
+                               e.g., `{'role': 'assistant', 'content': '...'}`.
+        """
+        try:
+            user_msg = {"role": "user", "content": user_prompt}
+            # The assistant_message is already a dict like {'role': 'assistant', 'content': ...}
+            latest_turn_list = [user_msg, assistant_message]
+            json_string = json.dumps(latest_turn_list)
+            self.pub_latest_turn.publish(
+                String(data=json_string))
+        except TypeError as e:
+            self.get_logger().error(f"Failed to serialize latest turn to JSON: {e}")
+
+        # --- Log to file ---
+        log_file_path = self.get_parameter('message_log').value
+        if not log_file_path:
+            return  # Do nothing if the parameter is not set
+
+        try:
+            log_data = []
+            # Check if the file exists and has content before trying to read it
+            if os.path.exists(log_file_path) and os.path.getsize(log_file_path) > 0:
+                with open(log_file_path, 'r', encoding='utf-8') as f:
+                    log_data = json.load(f)
+                if not isinstance(log_data, list):
+                    self.get_logger().warning(f"Log file '{log_file_path}' contained invalid data. Overwriting.")
+                    log_data = []
+
+            # If the log is empty, it's a new log. Prepend the system prompt if it exists.
+            if not log_data:
+                system_prompt = self.get_parameter('system_prompt').value
+                if system_prompt:
+                    log_data.append({"role": "system", "content": system_prompt})
+
+            # Append new messages from the latest turn
+            log_data.append({"role": "user", "content": user_prompt})
+            log_data.append(assistant_message)
+
+            # Write the updated array back to the file
+            with open(log_file_path, 'w', encoding='utf-8') as f:
+                json.dump(log_data, f, indent=2)
+
+        except (IOError, json.JSONDecodeError) as e:
+            self.get_logger().error(f"Error processing message log file '{log_file_path}': {e}")
+            
     def _trim_chat_history(self):
         """
         Prevents the chat history from growing indefinitely.
 
-        It trims the oldest user/assistant messages to stay within the
-        'max_history_length' limit, preserving the system prompt and any
-        initial few-shot examples.
+        It trims the oldest conversational turns to stay within the 'max_history_length'
+        limit, preserving the system prompt and any initial few-shot examples.
+        A turn is defined as a user message and all subsequent assistant/tool
+        messages that follow it.
         """
         max_len = self.get_parameter('max_history_length').value
-        start_index = 0
 
-        for i, msg in enumerate(self.chat_history):
-            if msg['role'] in ['user', 'assistant']:
-                start_index = i
-                break
+        # Separate the static prefix (system prompt, few-shot) from the conversation
+        prefix = self.chat_history[:self._prefix_history_len]
+        conversation = self.chat_history[self._prefix_history_len:]
 
-        conversational_history = self.chat_history[start_index:]
-        if len(conversational_history) > max_len * 2:
-            messages_to_remove = len(conversational_history) - (max_len * 2)
-            del self.chat_history[start_index : start_index + messages_to_remove]
+        # Find the start of each conversational turn (marked by a 'user' message)
+        user_message_indices = [
+            i for i, msg in enumerate(conversation) if msg['role'] == 'user']
+        
+        num_turns = len(user_message_indices)
+
+        if num_turns > max_len:
+            # Determine the index of the first message of the first turn to keep
+            first_turn_to_keep_idx = user_message_indices[num_turns - max_len]
+
+            # Trim the conversation, keeping only the most recent turns
+            trimmed_conversation = conversation[first_turn_to_keep_idx:]
+
+            # Reconstruct the full chat history
+            self.chat_history = prefix + trimmed_conversation
             self.get_logger().info(
-                f"Trimmed {messages_to_remove} old message(s) from chat history.")
+                f"Trimmed {num_turns - max_len} old turn(s) from chat history.")
+        
+        self.get_logger().debug(f"History: {str(self.chat_history)}")
 
     def prompt_callback(self, msg):
         """
@@ -378,6 +452,7 @@ class LLMNode(Node):
 
                         self.get_logger().info(f"Executing tool '{function_name}' with args: {args_dict}")
                         result = func_to_call(**args_dict)
+                        self.get_logger().debug(str(result))
 
                         self.chat_history.append({
                             "tool_call_id": tool_call_id, "role": "tool",
@@ -420,8 +495,9 @@ class LLMNode(Node):
                 String(data=full_response))
             self.get_logger().info(
                 f"Finished streaming. Full response: {full_response[:80]}...")
-            self.chat_history.append(
-                {"role": "assistant", "content": full_response})
+            assistant_message = {"role": "assistant", "content": full_response}
+            self.chat_history.append(assistant_message)
+            self._publish_latest_turn(msg.data, assistant_message)
         else:
             self.get_logger().info("Generating non-streamed final response...")
             success, final_message = self.llm_client.process_prompt(self.chat_history)
@@ -429,10 +505,11 @@ class LLMNode(Node):
             if success and final_message.get("content"):
                 llm_response_text = final_message["content"]
                 self.pub_response.publish(
-                    String(data=lm_response_text))
+                    String(data=llm_response_text))
                 self.get_logger().info(
                     f"Published LLM response: {llm_response_text[:80]}...")
                 self.chat_history.append(final_message)
+                self._publish_latest_turn(msg.data, final_message)
             else:
                 self.get_logger().error(
                     f"Failed to get final non-streamed response: {final_message}")
@@ -442,9 +519,11 @@ class LLMNode(Node):
 def main(args=None):
     rclpy.init(args=args)
     llm_node = LLMNode()
+    executor = MultiThreadedExecutor()
+    executor.add_node(llm_node)
 
     try:
-        rclpy.spin(llm_node)
+        executor.spin()
     except KeyboardInterrupt:
         llm_node.get_logger().info(
             "KeyboardInterrupt received, shutting down.")
