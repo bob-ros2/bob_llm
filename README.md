@@ -70,6 +70,17 @@ Robot status: Battery is at 85%. All systems are nominal. Currently idle.
 >
 ```
 
+### 3. Image Handling
+
+The node supports multimodal input (images) if the `process_image_urls` parameter is set to `true`. You can pass an image URL in a JSON prompt, and the node will automatically fetch, encode, and format it for the LLM.
+
+**Example:**
+```bash
+ros2 topic pub /llm_prompt std_msgs/msg/String "data: '{\"role\": \"user\", \"content\": \"Describe this image\", \"image_url\": \"file:///path/to/image.jpg\"}'" -1
+```
+The node supports both `file://` and `http://` URLs.
+
+
 ## Conversation Flow
 
 1.  A user publishes a prompt to the `/llm_prompt` topic.
@@ -110,6 +121,7 @@ All parameters can be set via a YAML file, command-line arguments, or environmen
 | `max_history_length`      | integer      | `10`                           | `LLM_MAX_HISTORY_LENGTH`      | Maximum number of user/assistant conversational turns to keep in history.              |
 | `message_log`             | string       | `""`                           | `LLM_MESSAGE_LOG`             | If set to a file path, appends each conversational turn to a persistent JSON log file. |
 | `stream`                  | bool         | `true`                         | `LLM_STREAM`                  | Enable or disable streaming for the final LLM response.                                |
+| `process_image_urls`    | bool         | `false`                        | `LLM_PROCESS_IMAGE_URLS`      | If true, processes `image_url` in JSON prompts by base64 encoding the image.           |
 | `max_tool_calls`          | integer      | `5`                            | `LLM_MAX_TOOL_CALLS`          | Maximum number of consecutive tool calls before aborting to prevent loops.           |
 | `temperature`             | double       | `0.7`                          | `LLM_TEMPERATURE`             | Controls the randomness of the output. Lower is more deterministic.                    |
 | `top_p`                   | double       | `1.0`                          | `LLM_TOP_P`                   | Nucleus sampling. Controls output diversity. Alter this or temperature, not both.    |

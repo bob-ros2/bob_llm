@@ -20,7 +20,8 @@ class OpenAICompatibleClient:
         max_tokens: int = 0, 
         stop: list = None,
         presence_penalty: float = 0.0, 
-        frequency_penalty: float = 0.0):
+        frequency_penalty: float = 0.0,
+        timeout: float = 60.0):
         """
         Initializes the OpenAICompatibleClient.
 
@@ -35,6 +36,7 @@ class OpenAICompatibleClient:
             stop: A list of sequences to stop generation at.
             presence_penalty: Penalty for new tokens based on their presence.
             frequency_penalty: Penalty for new tokens based on their frequency.
+            timeout: Timeout in seconds for API requests.
         """
 
         self.api_url = api_url.rstrip('/') + "/v1/chat/completions"
@@ -50,6 +52,7 @@ class OpenAICompatibleClient:
         self.stop = stop
         self.presence_penalty = presence_penalty
         self.frequency_penalty = frequency_penalty
+        self.timeout = timeout
 
     def _build_payload(self, history: list, tools: list = None, stream: bool = False) -> dict:
         """
@@ -119,7 +122,7 @@ class OpenAICompatibleClient:
                 self.api_url, 
                 headers=self.headers, 
                 json=payload, 
-                timeout=60)
+                timeout=self.timeout)
             response.raise_for_status()
             message = response.json()['choices'][0]['message']
 
@@ -149,7 +152,13 @@ class OpenAICompatibleClient:
         payload = self._build_payload(history, tools, stream=True)
 
         try:
-            with requests.post(self.api_url, headers=self.headers, json=payload, timeout=60, stream=True) as response:
+            with requests.post(
+                self.api_url,
+                headers=self.headers,
+                json=payload,
+                stream=True,
+                timeout=self.timeout
+                ) as response:
                 response.raise_for_status()
                 for line in response.iter_lines():
                     if line:

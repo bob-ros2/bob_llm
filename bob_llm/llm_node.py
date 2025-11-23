@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 import os
 import json
+import base64
+import requests
+import mimetypes
+import logging
 import traceback
 import importlib
 import importlib.util
 import rclpy
 from rclpy.node import Node
+from rclpy.logging import LoggingSeverity
 from std_msgs.msg import String
 from rcl_interfaces.msg import ParameterDescriptor
 from rcl_interfaces.msg import ParameterType
@@ -24,6 +29,16 @@ class LLMNode(Node):
     """
     def __init__(self):
         super().__init__('llm')
+
+        # Synchronize logging level with ROS logger verbosity for library output.
+        logging.basicConfig(
+            level = (logging.DEBUG
+                if self.get_logger().get_effective_level() \
+                    == LoggingSeverity.DEBUG \
+                else logging.INFO),
+            format="[%(levelname)s] [%(asctime)s.] [%(name)s]: %(message)s",
+            datefmt="%s")
+
         self.get_logger().info("LLM Node starting up...")
 
         # Get the string list from environment or use the example as default
@@ -121,6 +136,7 @@ class LLMNode(Node):
             )
         )
         self.declare_parameter('stop',
+            os.environ.get('LLM_STOP', 'stop_llm').split(','),
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING_ARRAY,
                 description='A list of sequences to stop generation at.'
@@ -140,6 +156,13 @@ class LLMNode(Node):
                 description='Penalizes new tokens based on their frequency in the text so far.'
             )
         )
+        self.declare_parameter('api_timeout',
+            float(os.environ.get('LLM_API_TIMEOUT', '120.0')),
+            ParameterDescriptor(
+                type=ParameterType.PARAMETER_DOUBLE,
+                description='Timeout in seconds for API requests to the LLM backend.'
+            )
+        )
         self.declare_parameter('tool_interfaces', 
             interfaces_array,
             descriptor=ParameterDescriptor(
@@ -154,6 +177,13 @@ class LLMNode(Node):
                 description='If set, appends each user/assistant turn to this JSON file.'
             )
         )
+        self.declare_parameter('process_image_urls',
+            False,
+            ParameterDescriptor(
+                type=ParameterType.PARAMETER_BOOL,
+                description='If true, processes image_url in JSON prompts by base64 encoding the image.'
+            )
+        )
 
         self.chat_history = []
         self.load_llm_client()
@@ -164,19 +194,21 @@ class LLMNode(Node):
         self.tools, self.tool_functions = self._load_tools()
         if self.tools:
             self.get_logger().info(f"Successfully loaded {len(self.tools)} tools.")
-        
+
+        DEFAULT_QUEUE_SIZE = int(os.environ.get('LLM_QUEUE_SIZE', '1000'))
+
         self.sub = self.create_subscription(
-            String, 'llm_prompt', self.prompt_callback, 10)
+            String, 'llm_prompt', self.prompt_callback, DEFAULT_QUEUE_SIZE)
 
         self.pub_response = self.create_publisher(
-            String, 'llm_response', 10)
+            String, 'llm_response', DEFAULT_QUEUE_SIZE)
 
         self.pub_stream = self.create_publisher(
-            String, 'llm_stream', 10)
+            String, 'llm_stream', DEFAULT_QUEUE_SIZE)
 
         self.pub_latest_turn = self.create_publisher(
-            String, 'llm_latest_turn', 10)
-            
+            String, 'llm_latest_turn', DEFAULT_QUEUE_SIZE)
+
         self.get_logger().info(
             f"Node is ready. History has {len(self.chat_history)} initial messages.")
 
@@ -239,7 +271,8 @@ class LLMNode(Node):
                 max_tokens=       self.get_parameter('max_tokens').value,
                 stop=             stop,
                 presence_penalty= self.get_parameter('presence_penalty').value,
-                frequency_penalty=self.get_parameter('frequency_penalty').value
+                frequency_penalty=self.get_parameter('frequency_penalty').value,
+                timeout=          self.get_parameter('api_timeout').value
             )
         else:
             self.get_logger().error(f"Unsupported API type: {api_type}")
@@ -354,6 +387,32 @@ class LLMNode(Node):
         except (IOError, json.JSONDecodeError) as e:
             self.get_logger().error(f"Error processing message log file '{log_file_path}': {e}")
             
+    def _get_truncated_history(self):
+        """Returns a copy of chat history with long strings truncated for logging."""
+        truncated_history = []
+        for msg in self.chat_history:
+            msg_copy = msg.copy()
+            
+            # Handle OpenAI Vision format (list of content parts)
+            if isinstance(msg_copy.get("content"), list):
+                new_content = []
+                for part in msg_copy["content"]:
+                    if isinstance(part, dict) and part.get("type") == "image_url":
+                        part_copy = part.copy()
+                        if "image_url" in part_copy and "url" in part_copy["image_url"]:
+                            url = part_copy["image_url"]["url"]
+                            if len(url) > 100:
+                                part_copy["image_url"] = {
+                                    "url": f"{url[:30]}...<truncated_base64>...{url[-30:]}"
+                                }
+                        new_content.append(part_copy)
+                    else:
+                        new_content.append(part)
+                msg_copy["content"] = new_content
+            
+            truncated_history.append(msg_copy)
+        return truncated_history
+
     def _trim_chat_history(self):
         """
         Prevents the chat history from growing indefinitely.
@@ -387,7 +446,7 @@ class LLMNode(Node):
             self.get_logger().info(
                 f"Trimmed {num_turns - max_len} old turn(s) from chat history.")
         
-        self.get_logger().debug(f"History: {str(self.chat_history)}")
+        self.get_logger().debug(f"History: {str(self._get_truncated_history())}")
 
     def prompt_callback(self, msg):
         """
@@ -407,7 +466,67 @@ class LLMNode(Node):
             return
 
         self.get_logger().info(f"Received prompt: '{msg.data}'")
-        self.chat_history.append({"role": "user", "content": msg.data})
+
+        # Try to parse as JSON first
+        user_content = msg.data
+        try:
+            json_data = json.loads(msg.data)
+            if isinstance(json_data, dict) and json_data.get("role") == "user":
+                # It's a valid user message structure
+                if self.get_parameter('process_image_urls').value and "image_url" in json_data:
+                    image_url = json_data["image_url"]
+                    try:
+                        image_data = None
+                        if image_url.startswith("file://"):
+                            file_path = image_url[7:]
+                            with open(file_path, "rb") as image_file:
+                                mime_type, _ = mimetypes.guess_type(file_path)
+                                if not mime_type:
+                                    mime_type = "image/jpeg" # Default fallback
+                                base64_data = base64.b64encode(image_file.read()).decode('utf-8')
+                                image_data = f"data:{mime_type};base64,{base64_data}"
+                        elif image_url.startswith("http"):
+                             response = requests.get(image_url)
+                             response.raise_for_status()
+                             mime_type = response.headers.get('Content-Type', 'image/jpeg')
+                             base64_data = base64.b64encode(response.content).decode('utf-8')
+                             image_data = f"data:{mime_type};base64,{base64_data}"
+
+                        if image_data:
+                            # Construct the new message structure using OpenAI Vision format
+                            user_content = {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": json_data.get("content", "")
+                                    },
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": image_data
+                                        }
+                                    }
+                                ]
+                            }
+                            self.get_logger().info(f"Processed image from {image_url}")
+                        else:
+                             self.get_logger().warning(f"Could not process image url: {image_url}")
+                             user_content = json_data # Fallback to original json dict
+
+                    except Exception as e:
+                        self.get_logger().error(f"Failed to process image url {image_url}: {e}")
+                        user_content = json_data # Fallback
+                else:
+                    user_content = json_data
+        except json.JSONDecodeError:
+            # Not JSON, treat as plain string
+            pass
+
+        if isinstance(user_content, str):
+             self.chat_history.append({"role": "user", "content": user_content})
+        else:
+             self.chat_history.append(user_content)
         self._trim_chat_history()
 
         stream_enabled = self.get_parameter('stream').value
