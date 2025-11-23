@@ -71,16 +71,20 @@ Robot status: Battery is at 85%. All systems are nominal. Currently idle.
 >
 ```
 
-### 3. Image Handling
+### 3. Advanced Input & Multi-modality
 
-The node supports multimodal input (images) if the `process_image_urls` parameter is set to `true`. You can pass an image URL in a JSON prompt, and the node will automatically fetch, encode, and format it for the LLM.
+The node supports advanced input formats beyond simple text strings. If the input message on `/llm_prompt` is a valid JSON string, it is parsed and treated as a message object.
 
-**Example:**
+**Generic JSON Input:**
+You can pass any valid JSON dictionary. If it contains a `role` field (e.g., `user`), it is treated as a standard message object and appended to the history. This allows you to send custom content structures supported by your specific LLM backend (e.g., complex multimodal inputs, custom fields).
+
+**Image Handling Helper:**
+For convenience, the node includes a helper for handling images. If `process_image_urls` is set to `true`, the node looks for an `image_url` field in your JSON input. It will automatically fetch the image (from `file://` or `http://` URLs), base64 encode it, and format the message according to the OpenAI Vision API specification.
+
+**Example (Image Helper):**
 ```bash
 ros2 topic pub /llm_prompt std_msgs/msg/String "data: '{\"role\": \"user\", \"content\": \"Describe this image\", \"image_url\": \"file:///path/to/image.jpg\"}'" -1
 ```
-The node supports both `file://` and `http://` URLs.
-
 
 ## Conversation Flow
 
@@ -114,20 +118,22 @@ All parameters can be set via a YAML file, command-line arguments, or environmen
 
 | Parameter                 | Type         | Default                        | Environment Variable          | Description                                                                          |
 | ------------------------- | ------------ | ------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------ |
+| `api_type`                | string       | `openai_compatible`            | `LLM_API_TYPE`                | The type of the LLM backend API. Currently only `openai_compatible` is supported.    |
+| `api_url`                 | string       | `http://localhost:8000`        | `LLM_API_URL`                 | The base URL of the LLM backend. The node appends `/v1/chat/completions` automatically.|
 | `api_key`                 | string       | `no_key`                       | `LLM_API_KEY`                 | The API key (Bearer token) for authentication with the LLM backend, if required.       |
 | `api_model`               | string       | `""`                           | `LLM_API_MODEL`               | The specific model name to use (e.g., "gpt-4", "llama3").                              |
-| `api_timeout`             | double       | `60.0`                         | `LLM_API_TIMEOUT`             | Timeout in seconds for API requests to the LLM backend.                                |
+| `api_timeout`             | double       | `120.0`                        | `LLM_API_TIMEOUT`             | Timeout in seconds for API requests to the LLM backend.                                |
 | `system_prompt`           | string       | `""`                           | `LLM_SYSTEM_PROMPT`           | The system prompt to set the LLM's context, personality, and instructions.           |
 | `initial_messages_json`   | string       | `[]`                           | `LLM_INITIAL_MESSAGES_JSON`   | A JSON string of initial messages for few-shot prompting to guide the LLM.             |
 | `max_history_length`      | integer      | `10`                           | `LLM_MAX_HISTORY_LENGTH`      | Maximum number of user/assistant conversational turns to keep in history.              |
 | `message_log`             | string       | `""`                           | `LLM_MESSAGE_LOG`             | If set to a file path, appends each conversational turn to a persistent JSON log file. |
 | `stream`                  | bool         | `true`                         | `LLM_STREAM`                  | Enable or disable streaming for the final LLM response.                                |
-| `process_image_urls`    | bool         | `false`                        | `LLM_PROCESS_IMAGE_URLS`      | If true, processes `image_url` in JSON prompts by base64 encoding the image.           |
+| `process_image_urls`      | bool         | `false`                        | `LLM_PROCESS_IMAGE_URLS`      | If true, processes `image_url` in JSON prompts by base64 encoding the image.           |
 | `max_tool_calls`          | integer      | `5`                            | `LLM_MAX_TOOL_CALLS`          | Maximum number of consecutive tool calls before aborting to prevent loops.           |
 | `temperature`             | double       | `0.7`                          | `LLM_TEMPERATURE`             | Controls the randomness of the output. Lower is more deterministic.                    |
 | `top_p`                   | double       | `1.0`                          | `LLM_TOP_P`                   | Nucleus sampling. Controls output diversity. Alter this or temperature, not both.    |
 | `max_tokens`              | integer      | `0`                            | `LLM_MAX_TOKENS`              | Maximum number of tokens to generate. `0` means use the server's default limit.        |
-| `stop`                    | string array | `[]`                           | `LLM_STOP`                    | A list of sequences where the API will stop generating further tokens.                 |
+| `stop`                    | string array | `["stop_llm"]`                 | `LLM_STOP`                    | A list of sequences where the API will stop generating further tokens.                 |
 | `presence_penalty`        | double       | `0.0`                          | `LLM_PRESENCE_PENALTY`        | Penalizes new tokens based on whether they appear in the text so far.                  |
 | `frequency_penalty`       | double       | `0.0`                          | `LLM_FREQUENCY_PENALTY`       | Penalizes new tokens based on their existing frequency in the text so far.             |
 | `tool_interfaces`         | string array | Path to `example_interface.py` | `LLM_TOOL_INTERFACES`         | A list of absolute paths to Python files containing tool functions. The node will attempt to load functions from each file path provided. |
