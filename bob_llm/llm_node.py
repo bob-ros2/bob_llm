@@ -17,6 +17,7 @@ from rcl_interfaces.msg import ParameterType
 from rclpy.parameter import Parameter
 from rclpy.executors import MultiThreadedExecutor
 from ament_index_python.packages import get_package_share_directory
+from rclpy.callback_groups import ReentrantCallbackGroup
 from bob_llm.tool_utils import register as default_register
 from bob_llm.backend_clients import OpenAICompatibleClient
 
@@ -197,8 +198,12 @@ class LLMNode(Node):
 
         DEFAULT_QUEUE_SIZE = int(os.environ.get('LLM_QUEUE_SIZE', '1000'))
 
+        self._is_generating = False
+        self._cancel_requested = False
+
         self.sub = self.create_subscription(
-            String, 'llm_prompt', self.prompt_callback, DEFAULT_QUEUE_SIZE)
+            String, 'llm_prompt', self.prompt_callback, DEFAULT_QUEUE_SIZE,
+            callback_group=ReentrantCallbackGroup())
 
         self.pub_response = self.create_publisher(
             String, 'llm_response', DEFAULT_QUEUE_SIZE)
@@ -461,179 +466,222 @@ class LLMNode(Node):
         Args:
             msg: The std_msgs/String message containing the user's prompt.
         """
-        if not self.llm_client:
-            self.get_logger().error("LLM client is not available. Cannot process prompt.")
+        # --- Cancellation Check ---
+        stop_list = self.get_parameter('stop').value
+        if msg.data in stop_list:
+            if self._is_generating:
+                self.get_logger().warn(f"Cancellation requested via stop command: '{msg.data}'")
+                self._cancel_requested = True
+            else:
+                self.get_logger().info(f"Received stop command '{msg.data}', but no generation is active.")
             return
 
-        self.get_logger().info(f"Received prompt: '{msg.data}'")
+        # --- Busy Check ---
+        if self._is_generating:
+            self.get_logger().warn("Node is busy generating a response. Ignoring new prompt.")
+            return
 
-        # Try to parse as JSON first
-        user_content = msg.data
+        # --- Start Generation ---
+        self._is_generating = True
+        self._cancel_requested = False
+
         try:
-            json_data = json.loads(msg.data)
-            if isinstance(json_data, dict) and json_data.get("role") == "user":
-                # It's a valid user message structure
-                if self.get_parameter('process_image_urls').value and "image_url" in json_data:
-                    image_url = json_data["image_url"]
-                    try:
-                        image_data = None
-                        if image_url.startswith("file://"):
-                            file_path = image_url[7:]
-                            with open(file_path, "rb") as image_file:
-                                mime_type, _ = mimetypes.guess_type(file_path)
-                                if not mime_type:
-                                    mime_type = "image/jpeg" # Default fallback
-                                base64_data = base64.b64encode(image_file.read()).decode('utf-8')
-                                image_data = f"data:{mime_type};base64,{base64_data}"
-                        elif image_url.startswith("http"):
-                             response = requests.get(image_url)
-                             response.raise_for_status()
-                             mime_type = response.headers.get('Content-Type', 'image/jpeg')
-                             base64_data = base64.b64encode(response.content).decode('utf-8')
-                             image_data = f"data:{mime_type};base64,{base64_data}"
-
-                        if image_data:
-                            # Construct the new message structure using OpenAI Vision format
-                            user_content = {
-                                "role": "user",
-                                "content": [
-                                    {
-                                        "type": "text",
-                                        "text": json_data.get("content", "")
-                                    },
-                                    {
-                                        "type": "image_url",
-                                        "image_url": {
-                                            "url": image_data
-                                        }
-                                    }
-                                ]
-                            }
-                            self.get_logger().info(f"Processed image from {image_url}")
-                        else:
-                             self.get_logger().warning(f"Could not process image url: {image_url}")
-                             user_content = json_data # Fallback to original json dict
-
-                    except Exception as e:
-                        self.get_logger().error(f"Failed to process image url {image_url}: {e}")
-                        user_content = json_data # Fallback
-                else:
-                    user_content = json_data
-        except json.JSONDecodeError:
-            # Not JSON, treat as plain string
-            pass
-
-        if isinstance(user_content, str):
-             self.chat_history.append({"role": "user", "content": user_content})
-        else:
-             self.chat_history.append(user_content)
-        self._trim_chat_history()
-
-        stream_enabled = self.get_parameter('stream').value
-        max_calls = self.get_parameter('max_tool_calls').value
-        tool_call_count = 0
-
-        # Phase 1: Tool-handling loop (always non-streaming)
-        while tool_call_count < max_calls:
-            success, response_message = self.llm_client.process_prompt(
-                self.chat_history,
-                self.tools if self.tools else None
-            )
-
-            if not success:
-                self.get_logger().error(f"Error during LLM request: {response_message}")
-                self.chat_history.pop() # Remove the user message that caused an error
+            if not self.llm_client:
+                self.get_logger().error("LLM client is not available. Cannot process prompt.")
                 return
 
-            if response_message.get("tool_calls"):
-                # The LLM wants to use a tool, so we add its request to history
-                self.chat_history.append(response_message)
-                self.get_logger().info(f"LLM requested a tool call: {response_message['tool_calls']}")
-                tool_call_count += 1
-                tool_calls = response_message["tool_calls"]
-                for tool_call in tool_calls:
-                    function_name = tool_call['function']['name']
-                    tool_call_id = tool_call['id']
+            self.get_logger().info(f"Received prompt: '{msg.data}'")
 
-                    func_to_call = self.tool_functions.get(function_name)
-                    if not func_to_call:
-                        error_msg = f"Error: Tool '{function_name}' not found."
-                        self.get_logger().error(error_msg)
-                        self.chat_history.append({
-                            "tool_call_id": tool_call_id, "role": "tool",
-                            "name": function_name, "content": error_msg
-                        })
-                        continue
+            # Try to parse as JSON first
+            user_content = msg.data
+            try:
+                json_data = json.loads(msg.data)
+                if isinstance(json_data, dict) and json_data.get("role") == "user":
+                    # It's a valid user message structure
+                    if self.get_parameter('process_image_urls').value and "image_url" in json_data:
+                        image_url = json_data["image_url"]
+                        try:
+                            image_data = None
+                            if image_url.startswith("file://"):
+                                file_path = image_url[7:]
+                                with open(file_path, "rb") as image_file:
+                                    mime_type, _ = mimetypes.guess_type(file_path)
+                                    if not mime_type:
+                                        mime_type = "image/jpeg" # Default fallback
+                                    base64_data = base64.b64encode(image_file.read()).decode('utf-8')
+                                    image_data = f"data:{mime_type};base64,{base64_data}"
+                            elif image_url.startswith("http"):
+                                 response = requests.get(image_url)
+                                 response.raise_for_status()
+                                 mime_type = response.headers.get('Content-Type', 'image/jpeg')
+                                 base64_data = base64.b64encode(response.content).decode('utf-8')
+                                 image_data = f"data:{mime_type};base64,{base64_data}"
 
-                    try:
-                        args_str = tool_call['function']['arguments']
-                        args_dict = json.loads(args_str)
+                            if image_data:
+                                # Construct the new message structure using OpenAI Vision format
+                                user_content = {
+                                    "role": "user",
+                                    "content": [
+                                        {
+                                            "type": "text",
+                                            "text": json_data.get("content", "")
+                                        },
+                                        {
+                                            "type": "image_url",
+                                            "image_url": {
+                                                "url": image_data
+                                            }
+                                        }
+                                    ]
+                                }
+                                self.get_logger().info(f"Processed image from {image_url}")
+                            else:
+                                 self.get_logger().warning(f"Could not process image url: {image_url}")
+                                 user_content = json_data # Fallback to original json dict
 
-                        self.get_logger().info(f"Executing tool '{function_name}' with args: {args_dict}")
-                        result = func_to_call(**args_dict)
-                        self.get_logger().debug(str(result))
+                        except Exception as e:
+                            self.get_logger().error(f"Failed to process image url {image_url}: {e}")
+                            user_content = json_data # Fallback
+                    else:
+                        user_content = json_data
+            except json.JSONDecodeError:
+                # Not JSON, treat as plain string
+                pass
 
-                        self.chat_history.append({
-                            "tool_call_id": tool_call_id, "role": "tool",
-                            "name": function_name, "content": str(result)
-                        })
-                    except Exception as e:
-                        error_trace = traceback.format_exc()
-                        error_msg = f"Error executing tool {function_name}: {e}"
-                        self.get_logger().error(f"{error_msg}\n{error_trace}")
-                        self.chat_history.append({
-                            "tool_call_id": tool_call_id, "role": "tool",
-                            "name": function_name, "content": error_msg
-                        })
-                continue
+            if isinstance(user_content, str):
+                 self.chat_history.append({"role": "user", "content": user_content})
             else:
-                # LLM is ready to generate a text response, so we break the loop.
-                # We do NOT add its empty message to history here.
-                break
+                 self.chat_history.append(user_content)
+            self._trim_chat_history()
 
-        if tool_call_count >= max_calls:
-            # Handle reaching the tool call limit
-            error_msg = f"Max tool calls ({max_calls}) reached. Aborting."
-            self.get_logger().warning(error_msg)
-            self.pub_response.publish(String(
-                data="I seem to be stuck in a tool-use loop. Please rephrase your request."))
-            return
+            stream_enabled = self.get_parameter('stream').value
+            max_calls = self.get_parameter('max_tool_calls').value
+            tool_call_count = 0
 
-        # Phase 2: Final response generation (stream or single response)
-        if stream_enabled:
-            self.get_logger().info("Streaming final response...")
-            full_response = ""
+            # Phase 1: Tool-handling loop (always non-streaming)
+            while tool_call_count < max_calls:
+                if self._cancel_requested:
+                    self.get_logger().warn("Generation cancelled during tool loop.")
+                    return
 
-            for chunk in self.llm_client.stream_prompt(self.chat_history):
-                if chunk:
-                    full_response += chunk
-                    self.pub_stream.publish(
-                        String(data=chunk))
+                success, response_message = self.llm_client.process_prompt(
+                    self.chat_history,
+                    self.tools if self.tools else None
+                )
 
-            self.pub_response.publish(
-                String(data=full_response))
-            self.get_logger().info(
-                f"Finished streaming. Full response: {full_response[:80]}...")
-            assistant_message = {"role": "assistant", "content": full_response}
-            self.chat_history.append(assistant_message)
-            self._publish_latest_turn(msg.data, assistant_message)
-        else:
-            self.get_logger().info("Generating non-streamed final response...")
-            success, final_message = self.llm_client.process_prompt(self.chat_history)
+                if not success:
+                    self.get_logger().error(f"Error during LLM request: {response_message}")
+                    self.chat_history.pop() # Remove the user message that caused an error
+                    return
 
-            if success and final_message.get("content"):
-                llm_response_text = final_message["content"]
+                if response_message.get("tool_calls"):
+                    # The LLM wants to use a tool, so we add its request to history
+                    self.chat_history.append(response_message)
+                    self.get_logger().info(f"LLM requested a tool call: {response_message['tool_calls']}")
+                    tool_call_count += 1
+                    tool_calls = response_message["tool_calls"]
+                    for tool_call in tool_calls:
+                        if self._cancel_requested:
+                            self.get_logger().warn("Generation cancelled before tool execution.")
+                            return
+
+                        function_name = tool_call['function']['name']
+                        tool_call_id = tool_call['id']
+
+                        func_to_call = self.tool_functions.get(function_name)
+                        if not func_to_call:
+                            error_msg = f"Error: Tool '{function_name}' not found."
+                            self.get_logger().error(error_msg)
+                            self.chat_history.append({
+                                "tool_call_id": tool_call_id, "role": "tool",
+                                "name": function_name, "content": error_msg
+                            })
+                            continue
+
+                        try:
+                            args_str = tool_call['function']['arguments']
+                            args_dict = json.loads(args_str)
+
+                            self.get_logger().info(f"Executing tool '{function_name}' with args: {args_dict}")
+                            result = func_to_call(**args_dict)
+                            self.get_logger().debug(str(result))
+
+                            self.chat_history.append({
+                                "tool_call_id": tool_call_id, "role": "tool",
+                                "name": function_name, "content": str(result)
+                            })
+                        except Exception as e:
+                            error_trace = traceback.format_exc()
+                            error_msg = f"Error executing tool {function_name}: {e}"
+                            self.get_logger().error(f"{error_msg}\n{error_trace}")
+                            self.chat_history.append({
+                                "tool_call_id": tool_call_id, "role": "tool",
+                                "name": function_name, "content": error_msg
+                            })
+                    continue
+                else:
+                    # LLM is ready to generate a text response, so we break the loop.
+                    # We do NOT add its empty message to history here.
+                    break
+
+            if tool_call_count >= max_calls:
+                # Handle reaching the tool call limit
+                error_msg = f"Max tool calls ({max_calls}) reached. Aborting."
+                self.get_logger().warning(error_msg)
+                self.pub_response.publish(String(
+                    data="I seem to be stuck in a tool-use loop. Please rephrase your request."))
+                return
+
+            if self._cancel_requested:
+                self.get_logger().warn("Generation cancelled before final response.")
+                return
+
+            # Phase 2: Final response generation (stream or single response)
+            if stream_enabled:
+                self.get_logger().info("Streaming final response...")
+                full_response = ""
+
+                for chunk in self.llm_client.stream_prompt(self.chat_history):
+                    if self._cancel_requested:
+                        self.get_logger().warn("Generation cancelled during streaming.")
+                        self.pub_response.publish(String(data="[Cancelled]"))
+                        return
+
+                    if chunk:
+                        full_response += chunk
+                        self.pub_stream.publish(
+                            String(data=chunk))
+
                 self.pub_response.publish(
-                    String(data=llm_response_text))
+                    String(data=full_response))
                 self.get_logger().info(
-                    f"Published LLM response: {llm_response_text[:80]}...")
-                self.chat_history.append(final_message)
-                self._publish_latest_turn(msg.data, final_message)
+                    f"Finished streaming. Full response: {full_response[:80]}...")
+                assistant_message = {"role": "assistant", "content": full_response}
+                self.chat_history.append(assistant_message)
+                self._publish_latest_turn(msg.data, assistant_message)
             else:
-                self.get_logger().error(
-                    f"Failed to get final non-streamed response: {final_message}")
-                self.pub_response.publish(
-                    String(data="Sorry, I encountered an error generating my final response."))
+                self.get_logger().info("Generating non-streamed final response...")
+                success, final_message = self.llm_client.process_prompt(self.chat_history)
+
+                if self._cancel_requested:
+                    self.get_logger().warn("Generation cancelled after non-streamed response.")
+                    return
+
+                if success and final_message.get("content"):
+                    llm_response_text = final_message["content"]
+                    self.pub_response.publish(
+                        String(data=llm_response_text))
+                    self.get_logger().info(
+                        f"Published LLM response: {llm_response_text[:80]}...")
+                    self.chat_history.append(final_message)
+                    self._publish_latest_turn(msg.data, final_message)
+                else:
+                    self.get_logger().error(
+                        f"Failed to get final non-streamed response: {final_message}")
+                    self.pub_response.publish(
+                        String(data="Sorry, I encountered an error generating my final response."))
+        finally:
+            self._is_generating = False
 
 def main(args=None):
     rclpy.init(args=args)
