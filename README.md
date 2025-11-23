@@ -9,6 +9,7 @@ The `bob_llm` package provides a ROS 2 node (`llm node`) that acts as a powerful
 -   **Dynamic Tool System:** Dynamically loads Python functions from user-provided files and makes them available to the LLM. The LLM can request to call these functions to perform actions or gather information.
 -   **Streaming Support:** Can stream the LLM's final response token-by-token for real-time feedback.
 -   **Fully Parameterized:** All configuration, from API endpoints to LLM generation parameters, is handled through a single ROS parameters file.
+-   **Multi-modality:** Supports multimodal input (e.g., images) via JSON prompts.
 -   **Lightweight:** The node is simple and has minimal dependencies, requiring only a few standard Python libraries (`requests`, `PyYAML`) on top of ROS 2.
 
 
@@ -210,4 +211,46 @@ llm:
 
     # ... other parameters
 ```
+
+### Inbuilt Tools
+
+The package comes with several ready-to-use tool modules in the `config/` directory.
+
+#### 1. ROS CLI Tools (`config/ros_cli_tools.py`)
+
+This module provides a comprehensive set of tools that wrap standard ROS 2 command-line interface (CLI) functionalities. It allows the LLM to inspect the system (list nodes, topics, services) and interact with it (publish messages, call services, get/set parameters).
+
+**Dependencies:**
+-   None (uses standard ROS 2 libraries and CLI tools).
+
+**Usage:**
+Add the absolute path to `config/ros_cli_tools.py` to your `tool_interfaces` parameter.
+
+#### 2. Qdrant Memory Tools (`config/qdrant_tools.py`)
+
+This module enables long-term memory for the LLM using the Qdrant vector database. It uses the Model Context Protocol (MCP) to communicate with a Qdrant MCP server.
+
+**Features:**
+-   `save_memory`: Stores information with optional metadata.
+-   `search_memory`: Semantically searches for relevant information in the database.
+
+**Prerequisites:**
+1.  **Qdrant Server:** You must have a running Qdrant server instance. See [Qdrant Quickstart](https://qdrant.tech/) for installation instructions.
+2.  **MCP Python Package:** Install the `mcp` library:
+    ```bash
+    pip install mcp
+    ```
+3.  **Qdrant MCP Server:** Install the Qdrant MCP server (see [mcp-server-qdrant](https://github.com/qdrant/mcp-server-qdrant)). Ensure `mcp-server-qdrant` is in your PATH.
+
+**Environment Variables:**
+The `qdrant_tools.py` module requires the following environment variables to connect to your Qdrant instance:
+
+```bash
+export QDRANT_URL="http://localhost:6333"
+export QDRANT_API_KEY="your_key"
+export COLLECTION_NAME="my_knowledge_base"
+```
+
+**Usage:**
+Add the absolute path to `config/qdrant_tools.py` to your `tool_interfaces` parameter.
 The node will load all specified tool files at startup.
