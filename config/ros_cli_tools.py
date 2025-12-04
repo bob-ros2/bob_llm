@@ -63,9 +63,9 @@ def echo_topic_once(topic_name: str) -> str:
     return _run_ros_command(["ros2", "topic", "echo", "--once", topic_name])
 
 def publish_topic_message(topic_name: str, message_type: str, message_yaml: str) -> str:
-    """Publishes a single message to a ROS 2 topic using YAML format."""
-    # Example: publish_topic_message("/chatter", "std_msgs/msg/String", "data: 'hello world'")
-    return _run_ros_command(["ros2", "topic", "pub", "--once", topic_name, message_type, message_yaml])
+    """Publishes a single message to a ROS 2 topic using YAML format.
+    Example: publish_topic_message("/chatter", "std_msgs/msg/String", "data: 'hello world'")"""
+    return _run_ros_command(["ros2", "topic", "pub", "--once", "--keep-alive", "1.0", topic_name, message_type, message_yaml])
 
 # === Node Tools ===
 
