@@ -490,7 +490,8 @@ class LLMNode(Node):
                 self.get_logger().error("LLM client is not available. Cannot process prompt.")
                 return
 
-            self.get_logger().info(f"Received prompt: '{msg.data}'")
+            self.get_logger().info(f"Prompt received")
+            self.get_logger().debug(f"Promp: '{msg.data}'")
 
             # Try to parse as JSON first
             user_content = msg.data
@@ -654,7 +655,7 @@ class LLMNode(Node):
 
                 self.pub_response.publish(
                     String(data=full_response))
-                self.get_logger().info(
+                self.get_logger().debug(
                     f"Finished streaming. Full response: {full_response[:80]}...")
                 assistant_message = {"role": "assistant", "content": full_response}
                 self.chat_history.append(assistant_message)
