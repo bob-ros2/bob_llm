@@ -172,7 +172,7 @@ class LLMNode(Node):
             )
         )
         self.declare_parameter('message_log',
-            os.environ.get('LLM_MESSAGE_LOG', '/blue/dev/you/messages.json'),
+            os.environ.get('LLM_MESSAGE_LOG', ''),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
                 description='If set, appends each user/assistant turn to this JSON file.'
