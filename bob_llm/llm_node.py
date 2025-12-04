@@ -605,11 +605,20 @@ class LLMNode(Node):
 
                             self.get_logger().info(f"Executing tool '{function_name}' with args: {args_dict}")
                             result = func_to_call(**args_dict)
-                            self.get_logger().debug(str(result))
+                            # Serialize result to JSON string if possible
+                            if isinstance(result, str):
+                                content_str = result
+                            else:
+                                try:
+                                    content_str = json.dumps(result, ensure_ascii=False)
+                                except (TypeError, ValueError):
+                                    content_str = str(result)
+
+                            self.get_logger().debug(content_str)
 
                             self.chat_history.append({
                                 "tool_call_id": tool_call_id, "role": "tool",
-                                "name": function_name, "content": str(result)
+                                "name": function_name, "content": content_str
                             })
                         except Exception as e:
                             error_trace = traceback.format_exc()
