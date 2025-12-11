@@ -16,7 +16,8 @@ python_executable = sys.executable
 
 server_env = os.environ.copy()
 # Provide a default collection name in case it's not set.
-server_env.setdefault('QDRANT_COLLECTION_NAME', 'llm_memory') 
+# Note: mcp-server-qdrant uses COLLECTION_NAME (not QDRANT_COLLECTION_NAME)
+server_env.setdefault('COLLECTION_NAME', 'llm_memory') 
 
 SERVER_PARAMS = StdioServerParameters(
     command="mcp-server-qdrant",
