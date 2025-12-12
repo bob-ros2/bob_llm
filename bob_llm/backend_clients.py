@@ -74,9 +74,17 @@ class OpenAICompatibleClient:
         Returns:
             A dictionary representing the complete JSON payload.
         """
+        # Sanitize history: ensure all messages have content as string (llama.cpp requirement)
+        sanitized_history = []
+        for msg in history:
+            msg_copy = msg.copy()
+            if msg_copy.get("content") is None:
+                msg_copy["content"] = ""
+            sanitized_history.append(msg_copy)
+
         payload = {
             "model": self.model,
-            "messages": history,
+            "messages": sanitized_history,
         }
 
         # Add parameters. Honor the "don't set both temp and top_p" convention.
