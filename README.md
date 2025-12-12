@@ -197,6 +197,9 @@ Response on `/llm_response`:
 
 This makes it easy to parse the response in downstream nodes without complex text parsing.
 
+> [!WARNING]
+> **Backend Compatibility:** The `response_format` parameter is supported by OpenAI, vLLM, and some other backends. However, **llama.cpp server does not support this parameter** and will crash with an error like `Content path must be a string`. If using llama.cpp, leave `response_format` empty or use their native grammar-based constraints instead.
+
 ### Conversation Logging
 
 The node can optionally save the entire conversation to a JSON file, which is useful for debugging, analysis, or creating datasets for fine-tuning models.
