@@ -616,6 +616,9 @@ class LLMNode(Node):
 
                 if response_message.get("tool_calls"):
                     # The LLM wants to use a tool, so we add its request to history
+                    # Ensure content is a string (not null) for llama.cpp compatibility
+                    if response_message.get("content") is None:
+                        response_message["content"] = ""
                     self.chat_history.append(response_message)
                     self.get_logger().info(f"LLM requested a tool call: {response_message['tool_calls']}")
                     tool_call_count += 1
