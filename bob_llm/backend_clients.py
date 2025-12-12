@@ -21,7 +21,8 @@ class OpenAICompatibleClient:
         stop: list = None,
         presence_penalty: float = 0.0, 
         frequency_penalty: float = 0.0,
-        timeout: float = 60.0):
+        timeout: float = 60.0,
+        response_format: dict = None):
         """
         Initializes the OpenAICompatibleClient.
 
@@ -37,6 +38,7 @@ class OpenAICompatibleClient:
             presence_penalty: Penalty for new tokens based on their presence.
             frequency_penalty: Penalty for new tokens based on their frequency.
             timeout: Timeout in seconds for API requests.
+            response_format: Optional dict for structured output, e.g. {"type": "json_object"}.
         """
 
         self.api_url = api_url.rstrip('/') + "/v1/chat/completions"
@@ -53,6 +55,7 @@ class OpenAICompatibleClient:
         self.presence_penalty = presence_penalty
         self.frequency_penalty = frequency_penalty
         self.timeout = timeout
+        self.response_format = response_format
 
     def _build_payload(self, history: list, tools: list = None, stream: bool = False) -> dict:
         """
@@ -97,6 +100,9 @@ class OpenAICompatibleClient:
         
         if stream:
             payload['stream'] = True
+
+        if self.response_format:
+            payload['response_format'] = self.response_format
 
         return payload
         

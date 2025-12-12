@@ -185,6 +185,13 @@ class LLMNode(Node):
                 description='If true, processes image_url in JSON prompts by base64 encoding the image.'
             )
         )
+        self.declare_parameter('response_format',
+            os.environ.get('LLM_RESPONSE_FORMAT', ''),
+            ParameterDescriptor(
+                type=ParameterType.PARAMETER_STRING,
+                description='JSON string defining the output format. E.g. {"type": "json_object"} or {"type": "json_schema", "json_schema": {...}}'
+            )
+        )
 
         self.chat_history = []
         self.load_llm_client()
@@ -266,6 +273,16 @@ class LLMNode(Node):
             except:
                 stop = None
 
+            # Parse response_format if provided
+            response_format_str = self.get_parameter('response_format').value
+            response_format = None
+            if response_format_str:
+                try:
+                    response_format = json.loads(response_format_str)
+                    self.get_logger().info(f"Using response_format: {response_format}")
+                except json.JSONDecodeError as e:
+                    self.get_logger().error(f"Failed to parse 'response_format' JSON: {e}")
+
             self.llm_client = OpenAICompatibleClient(
                 api_url=          self.get_parameter('api_url').value,
                 api_key=          self.get_parameter('api_key').value,
@@ -277,7 +294,8 @@ class LLMNode(Node):
                 stop=             stop,
                 presence_penalty= self.get_parameter('presence_penalty').value,
                 frequency_penalty=self.get_parameter('frequency_penalty').value,
-                timeout=          self.get_parameter('api_timeout').value
+                timeout=          self.get_parameter('api_timeout').value,
+                response_format=  response_format
             )
         else:
             self.get_logger().error(f"Unsupported API type: {api_type}")
@@ -494,65 +512,86 @@ class LLMNode(Node):
             self.get_logger().debug(f"Promp: '{msg.data}'")
 
             # Try to parse as JSON first
-            user_content = msg.data
+            prompt_text_for_log = msg.data
+            new_messages = []
+
             try:
                 json_data = json.loads(msg.data)
-                if isinstance(json_data, dict) and json_data.get("role") == "user":
-                    # It's a valid user message structure
-                    if self.get_parameter('process_image_urls').value and "image_url" in json_data:
-                        image_url = json_data["image_url"]
-                        try:
-                            image_data = None
-                            if image_url.startswith("file://"):
-                                file_path = image_url[7:]
-                                with open(file_path, "rb") as image_file:
-                                    mime_type, _ = mimetypes.guess_type(file_path)
-                                    if not mime_type:
-                                        mime_type = "image/jpeg" # Default fallback
-                                    base64_data = base64.b64encode(image_file.read()).decode('utf-8')
-                                    image_data = f"data:{mime_type};base64,{base64_data}"
-                            elif image_url.startswith("http"):
-                                 response = requests.get(image_url)
-                                 response.raise_for_status()
-                                 mime_type = response.headers.get('Content-Type', 'image/jpeg')
-                                 base64_data = base64.b64encode(response.content).decode('utf-8')
-                                 image_data = f"data:{mime_type};base64,{base64_data}"
+                if isinstance(json_data, list):
+                    new_messages = json_data
+                    # Attempt to extract clean text for logging from the last user message
+                    for m in reversed(new_messages):
+                        if isinstance(m, dict) and m.get("role") == "user":
+                            c = m.get("content", "")
+                            if isinstance(c, str):
+                                prompt_text_for_log = c
+                            break
+                elif isinstance(json_data, dict):
+                    user_content = json_data
+                    # It's a valid message structure
+                    if json_data.get("role") == "user":
+                        # Extract text for log
+                        c = json_data.get("content", "")
+                        if isinstance(c, str):
+                            prompt_text_for_log = c
 
-                            if image_data:
-                                # Construct the new message structure using OpenAI Vision format
-                                user_content = {
-                                    "role": "user",
-                                    "content": [
-                                        {
-                                            "type": "text",
-                                            "text": json_data.get("content", "")
-                                        },
-                                        {
-                                            "type": "image_url",
-                                            "image_url": {
-                                                "url": image_data
+                        if self.get_parameter('process_image_urls').value and "image_url" in json_data:
+                            image_url = json_data["image_url"]
+                            try:
+                                image_data = None
+                                if image_url.startswith("file://"):
+                                    file_path = image_url[7:]
+                                    with open(file_path, "rb") as image_file:
+                                        mime_type, _ = mimetypes.guess_type(file_path)
+                                        if not mime_type:
+                                            mime_type = "image/jpeg" # Default fallback
+                                        base64_data = base64.b64encode(image_file.read()).decode('utf-8')
+                                        image_data = f"data:{mime_type};base64,{base64_data}"
+                                elif image_url.startswith("http"):
+                                     response = requests.get(image_url)
+                                     response.raise_for_status()
+                                     mime_type = response.headers.get('Content-Type', 'image/jpeg')
+                                     base64_data = base64.b64encode(response.content).decode('utf-8')
+                                     image_data = f"data:{mime_type};base64,{base64_data}"
+
+                                if image_data:
+                                    # Construct the new message structure using OpenAI Vision format
+                                    user_content = {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "text",
+                                                "text": json_data.get("content", "")
+                                            },
+                                            {
+                                                "type": "image_url",
+                                                "image_url": {
+                                                    "url": image_data
+                                                }
                                             }
-                                        }
-                                    ]
-                                }
-                                self.get_logger().info(f"Processed image from {image_url}")
-                            else:
-                                 self.get_logger().warning(f"Could not process image url: {image_url}")
-                                 user_content = json_data # Fallback to original json dict
+                                        ]
+                                    }
+                                    self.get_logger().info(f"Processed image from {image_url}")
+                                else:
+                                     self.get_logger().warning(f"Could not process image url: {image_url}")
+                                     user_content = json_data # Fallback to original json dict
 
-                        except Exception as e:
-                            self.get_logger().error(f"Failed to process image url {image_url}: {e}")
-                            user_content = json_data # Fallback
-                    else:
-                        user_content = json_data
+                            except Exception as e:
+                                self.get_logger().error(f"Failed to process image url {image_url}: {e}")
+                                user_content = json_data # Fallback
+                    
+                    new_messages = [user_content]
+                else:
+                     # Parsed as JSON but not list or dict (e.g. number, bool)
+                     new_messages = [{"role": "user", "content": str(json_data)}]
+                     prompt_text_for_log = str(json_data)
+
             except json.JSONDecodeError:
                 # Not JSON, treat as plain string
-                pass
+                new_messages = [{"role": "user", "content": msg.data}]
+                prompt_text_for_log = msg.data
 
-            if isinstance(user_content, str):
-                 self.chat_history.append({"role": "user", "content": user_content})
-            else:
-                 self.chat_history.append(user_content)
+            self.chat_history.extend(new_messages)
             self._trim_chat_history()
 
             stream_enabled = self.get_parameter('stream').value
@@ -668,7 +707,7 @@ class LLMNode(Node):
                     f"Finished streaming. Full response: {full_response[:80]}...")
                 assistant_message = {"role": "assistant", "content": full_response}
                 self.chat_history.append(assistant_message)
-                self._publish_latest_turn(msg.data, assistant_message)
+                self._publish_latest_turn(prompt_text_for_log, assistant_message)
             else:
                 self.get_logger().info("Generating non-streamed final response...")
                 success, final_message = self.llm_client.process_prompt(self.chat_history)
@@ -684,7 +723,7 @@ class LLMNode(Node):
                     self.get_logger().info(
                         f"Published LLM response: {llm_response_text[:80]}...")
                     self.chat_history.append(final_message)
-                    self._publish_latest_turn(msg.data, final_message)
+                    self._publish_latest_turn(prompt_text_for_log, final_message)
                 else:
                     self.get_logger().error(
                         f"Failed to get final non-streamed response: {final_message}")

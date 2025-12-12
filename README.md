@@ -129,6 +129,7 @@ All parameters can be set via a YAML file, command-line arguments, or environmen
 | `message_log`             | string       | `""`                           | `LLM_MESSAGE_LOG`             | If set to a file path, appends each conversational turn to a persistent JSON log file. |
 | `stream`                  | bool         | `true`                         | `LLM_STREAM`                  | Enable or disable streaming for the final LLM response.                                |
 | `process_image_urls`      | bool         | `false`                        | `LLM_PROCESS_IMAGE_URLS`      | If true, processes `image_url` in JSON prompts by base64 encoding the image.           |
+| `response_format`         | string       | `""`                           | `LLM_RESPONSE_FORMAT`         | JSON string defining the output format. See [Structured JSON Output](#structured-json-output). |
 | `max_tool_calls`          | integer      | `5`                            | `LLM_MAX_TOOL_CALLS`          | Maximum number of consecutive tool calls before aborting to prevent loops.           |
 | `temperature`             | double       | `0.7`                          | `LLM_TEMPERATURE`             | Controls the randomness of the output. Lower is more deterministic.                    |
 | `top_p`                   | double       | `1.0`                          | `LLM_TOP_P`                   | Nucleus sampling. Controls output diversity. Alter this or temperature, not both.    |
@@ -137,6 +138,64 @@ All parameters can be set via a YAML file, command-line arguments, or environmen
 | `presence_penalty`        | double       | `0.0`                          | `LLM_PRESENCE_PENALTY`        | Penalizes new tokens based on whether they appear in the text so far.                  |
 | `frequency_penalty`       | double       | `0.0`                          | `LLM_FREQUENCY_PENALTY`       | Penalizes new tokens based on their existing frequency in the text so far.             |
 | `tool_interfaces`         | string array | Path to `example_interface.py` | `LLM_TOOL_INTERFACES`         | A list of absolute paths to Python files containing tool functions. The node will attempt to load functions from each file path provided. |
+
+### Structured JSON Output
+
+The `response_format` parameter enables structured output from the LLM, forcing it to respond with valid JSON that conforms to a specified schema. This is useful for parsing responses programmatically, building automation pipelines, or ensuring consistent output formats.
+
+#### JSON Object Mode
+
+The simplest form forces the LLM to output valid JSON:
+
+```yaml
+llm:
+  ros__parameters:
+    response_format: '{"type": "json_object"}'
+    system_prompt: "You are a robot assistant. Always respond with JSON containing 'action' and 'reasoning' fields."
+```
+
+> **Important:** When using `json_object` mode, your system prompt or user message **must** mention the word "JSON" — most LLM backends require this or will reject the request.
+
+#### JSON Schema Mode (Strict)
+
+For more control, you can define an exact JSON schema that the LLM must follow. This is supported by OpenAI and compatible backends like vLLM:
+
+```yaml
+llm:
+  ros__parameters:
+    response_format: |
+      {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "robot_command",
+          "strict": true,
+          "schema": {
+            "type": "object",
+            "properties": {
+              "action": {"type": "string", "enum": ["move", "stop", "rotate"]},
+              "target": {"type": "string"},
+              "speed": {"type": "number"}
+            },
+            "required": ["action"]
+          }
+        }
+      }
+```
+
+#### Example: Command Parsing
+
+With the above schema, the LLM will always respond with valid JSON:
+
+```bash
+$ ros2 topic pub /llm_prompt std_msgs/msg/String "data: 'Move forward slowly'" -1
+```
+
+Response on `/llm_response`:
+```json
+{"action": "move", "target": "forward", "speed": 0.3}
+```
+
+This makes it easy to parse the response in downstream nodes without complex text parsing.
 
 ### Conversation Logging
 
