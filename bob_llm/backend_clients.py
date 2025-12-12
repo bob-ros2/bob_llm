@@ -74,12 +74,16 @@ class OpenAICompatibleClient:
         Returns:
             A dictionary representing the complete JSON payload.
         """
-        # Sanitize history: ensure all messages have content as string (llama.cpp requirement)
+        # Sanitize history: ensure all messages have content as string (some backends require this)
         sanitized_history = []
         for msg in history:
             msg_copy = msg.copy()
-            if msg_copy.get("content") is None:
+            content = msg_copy.get("content")
+            if content is None:
                 msg_copy["content"] = ""
+            elif not isinstance(content, str):
+                # If content is a list (multimodal) or other type, convert to string
+                msg_copy["content"] = json.dumps(content) if isinstance(content, (list, dict)) else str(content)
             sanitized_history.append(msg_copy)
 
         payload = {
