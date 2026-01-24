@@ -8,6 +8,7 @@ import logging
 import traceback
 import importlib
 import importlib.util
+from collections import deque
 import rclpy
 from rclpy.node import Node
 from rclpy.logging import LoggingSeverity
@@ -207,6 +208,11 @@ class LLMNode(Node):
 
         self._is_generating = False
         self._cancel_requested = False
+        
+        # Prompt queue to handle incoming prompts when busy
+        self._prompt_queue = deque()
+        self._queue_timer = None
+        self._queue_timer_period = 0.1  # Check queue every 100ms
 
         self.sub = self.create_subscription(
             String, 'llm_prompt', self.prompt_callback, DEFAULT_QUEUE_SIZE,
@@ -496,7 +502,16 @@ class LLMNode(Node):
 
         # --- Busy Check ---
         if self._is_generating:
-            self.get_logger().warn("Node is busy generating a response. Ignoring new prompt.")
+            self._prompt_queue.append(msg.data)
+            self.get_logger().info(f"Node is busy. Queued prompt. Queue size: {len(self._prompt_queue)}")
+            
+            # Start timer if not already running
+            if self._queue_timer is None:
+                self._queue_timer = self.create_timer(
+                    self._queue_timer_period, 
+                    self._process_queue_callback,
+                    callback_group=ReentrantCallbackGroup()
+                )
             return
 
         # --- Start Generation ---
@@ -734,6 +749,34 @@ class LLMNode(Node):
                         String(data="Sorry, I encountered an error generating my final response."))
         finally:
             self._is_generating = False
+
+    def _process_queue_callback(self):
+        """
+        Timer callback to process queued prompts when the node is not busy.
+        
+        This callback is triggered periodically to check if there are any queued
+        prompts waiting to be processed. If the node is not currently generating
+        and there are prompts in the queue, it processes the oldest one.
+        """
+        # If still generating, wait for next timer tick
+        if self._is_generating:
+            return
+        
+        # If queue is empty, stop the timer
+        if not self._prompt_queue:
+            if self._queue_timer is not None:
+                self._queue_timer.cancel()
+                self._queue_timer = None
+            return
+        
+        # Process the next prompt from the queue
+        prompt_data = self._prompt_queue.popleft()
+        self.get_logger().info(f"Processing queued prompt. Remaining in queue: {len(self._prompt_queue)}")
+        
+        # Create a String message and process it
+        msg = String()
+        msg.data = prompt_data
+        self.prompt_callback(msg)
 
 def main(args=None):
     rclpy.init(args=args)
