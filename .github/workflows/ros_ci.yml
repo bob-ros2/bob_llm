@@ -1,0 +1,37 @@
+name: ROS 2 CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ros_ci:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ros_distro: [ humble, rolling ]
+        include:
+          - ros_distro: humble
+            ubuntu_distro: jammy
+          - ros_distro: rolling
+            ubuntu_distro: noble
+    container:
+      image: ros:${{ matrix.ros_distro }}-ros-base-${{ matrix.ubuntu_distro }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          rosdep update
+          rosdep install --from-paths . --ignore-src -r -y --rosdistro ${{ matrix.ros_distro }}
+
+      - name: Build and Test
+        run: |
+          . /opt/ros/${{ matrix.ros_distro }}/setup.sh
+          colcon build --event-handlers console_direct+
+          colcon test --event-handlers console_direct+
+          colcon test-result --all
