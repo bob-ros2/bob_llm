@@ -5,12 +5,13 @@
   <version>1.0.0</version>
   <description>ROS package for interfacing with LLM's and VLM's using OpenAI compatible API.</description>
   <maintainer email="bobmeuchelm@gmail.com">Bob Ros</maintainer>
-  <author email="bobmeuchelm@gmail.com">Bob Ros</author>
   <license>Apache-2.0</license>
 
   <url type="website">https://github.com/bob-ros2/bob_llm</url>
   <url type="repository">https://github.com/bob-ros2/bob_llm</url>
   <url type="bugtracker">https://github.com/bob-ros2/bob_llm/issues</url>
+
+  <author email="bobmeuchelm@gmail.com">Bob Ros</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

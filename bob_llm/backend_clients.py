@@ -1,52 +1,62 @@
+# Copyright 2026 Bob Ros
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import requests
-import traceback
+
 
 class OpenAICompatibleClient:
-    """
-    A client for OpenAI-compatible APIs that supports chat, tool use, and streaming.
+    """Client for OpenAI-compatible APIs."""
 
-    This class encapsulates the logic for sending requests to an LLM backend,
-    handling both standard (blocking) and streaming responses. It is configured
-    with various generation parameters to control the LLM's output.
-    """
-    def __init__(self,
-        api_url: str, 
-        api_key: str, 
-        model: str, 
+    def __init__(
+        self,
+        api_url: str,
+        api_key: str,
+        model: str,
         logger,
-        temperature: float = 0.7, 
+        temperature: float = 0.7,
         top_p: float = 1.0,
-        max_tokens: int = 0, 
+        max_tokens: int = 0,
         stop: list = None,
-        presence_penalty: float = 0.0, 
+        presence_penalty: float = 0.0,
         frequency_penalty: float = 0.0,
         timeout: float = 60.0,
-        response_format: dict = None):
+        response_format: dict = None
+    ):
         """
-        Initializes the OpenAICompatibleClient.
+        Initialize the OpenAICompatibleClient.
 
-        Args:
-            api_url: The base URL of the OpenAI-compatible API.
-            api_key: An optional API key for authentication (Bearer token).
-            model: The name of the model to use for completions.
-            logger: A ROS logger instance for logging messages.
-            temperature: Controls the randomness of the output.
-            top_p: Nucleus sampling parameter.
-            max_tokens: The maximum number of tokens to generate.
-            stop: A list of sequences to stop generation at.
-            presence_penalty: Penalty for new tokens based on their presence.
-            frequency_penalty: Penalty for new tokens based on their frequency.
-            timeout: Timeout in seconds for API requests.
-            response_format: Optional dict for structured output, e.g. {"type": "json_object"}.
+        :param api_url: The base URL of the OpenAI-compatible API.
+        :param api_key: An optional API key for authentication.
+        :param model: The name of the model to use for completions.
+        :param logger: A ROS logger instance for logging messages.
+        :param temperature: Controls the randomness of the output.
+        :param top_p: Nucleus sampling parameter.
+        :param max_tokens: The maximum number of tokens to generate.
+        :param stop: A list of sequences to stop generation at.
+        :param presence_penalty: Penalty for new tokens.
+        :param frequency_penalty: Penalty for new tokens.
+        :param timeout: Timeout in seconds for API requests.
+        :param response_format: Optional dict for structured output.
         """
-
         self.api_url = api_url.rstrip('/') + "/v1/chat/completions"
         self.api_key = api_key
         self.model = model
         self.logger = logger
         self.headers = {"Content-Type": "application/json"}
-        if api_key: self.headers["Authorization"] = f"Bearer {api_key}"
+        if api_key:
+            self.headers["Authorization"] = f"Bearer {api_key}"
 
         self.temperature = temperature
         self.top_p = top_p
@@ -59,22 +69,14 @@ class OpenAICompatibleClient:
 
     def _build_payload(self, history: list, tools: list = None, stream: bool = False) -> dict:
         """
-        Constructs the JSON payload for an API request.
+        Construct the JSON payload for an API request.
 
-        This helper method assembles the request body, including the model name,
-        message history, generation parameters, tool definitions, and stream flag.
-        It enforces the convention of using either 'temperature' or 'top_p', but
-        not both.
-
-        Args:
-            history: The list of messages in the chat history.
-            tools: An optional list of tool definitions.
-            stream: A boolean indicating whether to enable streaming.
-
-        Returns:
-            A dictionary representing the complete JSON payload.
+        :param history: The list of messages in the chat history.
+        :param tools: An optional list of tool definitions.
+        :param stream: A boolean indicating whether to enable streaming.
+        :return: A dictionary representing the complete JSON payload.
         """
-        # Sanitize history: ensure all messages have content as string (some backends require this)
+        # Sanitize history: ensure all messages have content as string
         sanitized_history = []
         for msg in history:
             msg_copy = msg.copy()
@@ -82,8 +84,10 @@ class OpenAICompatibleClient:
             if content is None:
                 msg_copy["content"] = ""
             elif not isinstance(content, str):
-                # If content is a list (multimodal) or other type, convert to string
-                msg_copy["content"] = json.dumps(content) if isinstance(content, (list, dict)) else str(content)
+                if isinstance(content, (list, dict)):
+                    msg_copy["content"] = json.dumps(content)
+                else:
+                    msg_copy["content"] = str(content)
             sanitized_history.append(msg_copy)
 
         payload = {
@@ -109,7 +113,7 @@ class OpenAICompatibleClient:
         if tools:
             payload['tools'] = tools
             payload['tool_choice'] = 'auto'
-        
+
         if stream:
             payload['stream'] = True
 
@@ -117,30 +121,24 @@ class OpenAICompatibleClient:
             payload['response_format'] = self.response_format
 
         return payload
-        
+
     def process_prompt(self, history: list, tools: list = None) -> (bool, dict):
         """
-        Sends a non-streaming request to the LLM to get a complete response.
+        Send a non-streaming request to the LLM to get a complete response.
 
-        This is used for single-shot responses, especially when expecting a tool call
-        from the model.
-
-        Args:
-            history: The list of messages in the chat history.
-            tools: An optional list of tool definitions.
-
-        Returns:
-            A tuple containing a boolean for success and either the response
-            message dictionary or an error string on failure.
+        :param history: The list of messages in the chat history.
+        :param tools: An optional list of tool definitions.
+        :return: A tuple containing (success, message).
         """
         payload = self._build_payload(history, tools, stream=False)
 
         try:
             response = requests.post(
-                self.api_url, 
-                headers=self.headers, 
-                json=payload, 
-                timeout=self.timeout)
+                self.api_url,
+                headers=self.headers,
+                json=payload,
+                timeout=self.timeout
+            )
             response.raise_for_status()
             message = response.json()['choices'][0]['message']
 
@@ -148,24 +146,18 @@ class OpenAICompatibleClient:
             return True, message
 
         except requests.exceptions.RequestException as e:
-            error_trace = traceback.format_exc()
             error_msg = f"API request failed: {e}"
-            if self.logger: self.logger.error(f"{error_msg}\n{error_trace}")
+            if self.logger:
+                self.logger.error(error_msg)
             return False, error_msg
 
     def stream_prompt(self, history: list, tools: list = None):
         """
-        Sends a streaming request to the LLM and yields response chunks.
+        Send a streaming request to the LLM and yield response chunks.
 
-        This method is used for generating the final text response token-by-token.
-
-        Args:
-            history: The list of messages in the chat history.
-            tools: An optional list of tool definitions (rarely used with streaming).
-
-        Yields:
-            String chunks of the generated text content as they are received.
-            An error message string is yielded if the request fails.
+        :param history: The list of messages in the chat history.
+        :param tools: An optional list of tool definitions.
+        :yield: String chunks of the generated text content.
         """
         payload = self._build_payload(history, tools, stream=True)
 
@@ -176,7 +168,7 @@ class OpenAICompatibleClient:
                 json=payload,
                 stream=True,
                 timeout=self.timeout
-                ) as response:
+            ) as response:
                 response.raise_for_status()
                 for line in response.iter_lines():
                     if line:
@@ -187,16 +179,17 @@ class OpenAICompatibleClient:
                                 break
                             try:
                                 data = json.loads(json_str)
-                                if 'choices' in data and len(data['choices']) > 0:
+                                if 'choices' in data and data['choices']:
                                     delta = data['choices'][0].get('delta', {})
                                     content = delta.get('content')
                                     if content:
                                         yield content
                             except json.JSONDecodeError:
-                                if self.logger: self.logger.warning(f"Could not decode JSON from stream: {json_str}")
+                                if self.logger:
+                                    self.logger.warning(
+                                        f"Could not decode JSON from stream: {json_str}")
         except requests.exceptions.RequestException as e:
-            error_trace = traceback.format_exc()
             error_msg = f"API stream request failed: {e}"
-            if self.logger: self.logger.error(f"{error_msg}\n{error_trace}")
-            # Yield an error message to the caller
+            if self.logger:
+                self.logger.error(error_msg)
             yield f"[ERROR: {error_msg}]"
