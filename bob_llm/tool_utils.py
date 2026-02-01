@@ -36,10 +36,10 @@ class Tool(TypedDict):
 
 # Map Python types to JSON Schema types
 TYPE_MAP = {
-    str: "string",
-    int: "integer",
-    float: "number",
-    bool: "boolean",
+    str: 'string',
+    int: 'integer',
+    float: 'number',
+    bool: 'boolean',
 }
 
 
@@ -59,33 +59,33 @@ def register(module: Any, node: Any = None) -> List[Tool]:
             continue
 
         sig = inspect.signature(func)
-        docstring = inspect.getdoc(func) or "No description provided."
+        docstring = inspect.getdoc(func) or 'No description provided.'
 
         # Extract the main description from the docstring (first line).
         description = docstring.strip().split('\n')[0]
 
         parameters = {
-            "type": "object",
-            "properties": {},
-            "required": [],
+            'type': 'object',
+            'properties': {},
+            'required': [],
         }
 
         for param_name, param in sig.parameters.items():
             if param.annotation is inspect.Parameter.empty:
-                param_type = "string"  # Default to string if no type hint
+                param_type = 'string'  # Default to string if no type hint
             else:
-                param_type = TYPE_MAP.get(param.annotation, "string")
+                param_type = TYPE_MAP.get(param.annotation, 'string')
 
-            parameters["properties"][param_name] = {"type": param_type}
+            parameters['properties'][param_name] = {'type': param_type}
             if param.default is inspect.Parameter.empty:
-                parameters["required"].append(param_name)
+                parameters['required'].append(param_name)
 
         tool: Tool = {
-            "type": "function",
-            "function": {
-                "name": name,
-                "description": description,
-                "parameters": parameters,
+            'type': 'function',
+            'function': {
+                'name': name,
+                'description': description,
+                'parameters': parameters,
             }
         }
         tools.append(tool)

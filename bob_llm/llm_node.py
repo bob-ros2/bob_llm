@@ -22,7 +22,6 @@ import os
 from collections import deque
 
 import requests
-
 import rclpy
 from ament_index_python.packages import get_package_share_directory
 from rcl_interfaces.msg import ParameterDescriptor
@@ -53,16 +52,16 @@ class LLMNode(Node):
                    if self.get_logger().get_effective_level()
                    == LoggingSeverity.DEBUG
                    else logging.INFO),
-            format="[%(levelname)s] [%(asctime)s.] [%(name)s]: %(message)s",
-            datefmt="%s")
+            format='[%(levelname)s] [%(asctime)s.] [%(name)s]: %(message)s',
+            datefmt='%s')
 
-        self.get_logger().info("LLM Node starting up...")
+        self.get_logger().info('LLM Node starting up...')
 
         # Get the string list from environment or use description
-        share_dir = get_package_share_directory("bob_llm")
+        share_dir = get_package_share_directory('bob_llm')
         interfaces_array = os.environ.get(
             'LLM_TOOL_INTERFACES',
-            os.path.join(share_dir, "config", "example_interface.py"))
+            os.path.join(share_dir, 'config', 'example_interface.py'))
         interfaces_array = interfaces_array.split(',')
 
         # ROS parameters
@@ -237,7 +236,7 @@ class LLMNode(Node):
         self.tools, self.tool_functions = self._load_tools()
         if self.tools:
             self.get_logger().info(
-                f"Successfully loaded {len(self.tools)} tools.")
+                f'Successfully loaded {len(self.tools)} tools.')
 
         DEFAULT_QUEUE_SIZE = int(os.environ.get('LLM_QUEUE_SIZE', '1000'))
 
@@ -262,21 +261,21 @@ class LLMNode(Node):
             String, 'llm_latest_turn', DEFAULT_QUEUE_SIZE)
 
         self.get_logger().info(
-            f"Node is ready. History has {len(self.chat_history)} initial messages.")
+            f'Node is ready. History has {len(self.chat_history)} initial messages.')
 
     def _initialize_chat_history(self):
         """Populate the initial chat history from ROS parameters."""
         system_prompt = self.get_parameter('system_prompt').value
         if system_prompt:
-            self.chat_history.append({"role": "system", "content": system_prompt})
-            self.get_logger().info("System prompt added.")
+            self.chat_history.append({'role': 'system', 'content': system_prompt})
+            self.get_logger().info('System prompt added.')
         initial_messages_str = self.get_parameter('initial_messages_json').value
         try:
             initial_messages = json.loads(initial_messages_str)
             if isinstance(initial_messages, list):
                 self.chat_history.extend(initial_messages)
                 self.get_logger().info(
-                    f"Loaded {len(initial_messages)} initial messages from JSON.")
+                    f'Loaded {len(initial_messages)} initial messages from JSON.')
         except json.JSONDecodeError:
             self.get_logger().error(
                 "Failed to parse 'initial_messages_json'.")
@@ -293,7 +292,7 @@ class LLMNode(Node):
             return
 
         self.get_logger().info(
-            f"Connecting to LLM at {api_url} with model {model}")
+            f'Connecting to LLM at {api_url} with model {model}')
 
         if api_type == 'openai_compatible':
 
@@ -308,7 +307,7 @@ class LLMNode(Node):
             if response_format_str:
                 try:
                     response_format = json.loads(response_format_str)
-                    self.get_logger().info(f"Using response_format: {response_format}")
+                    self.get_logger().info(f'Using response_format: {response_format}')
                 except json.JSONDecodeError as e:
                     self.get_logger().error(
                         f"Failed to parse 'response_format' JSON: {e}")
@@ -328,7 +327,7 @@ class LLMNode(Node):
                 response_format=response_format
             )
         else:
-            self.get_logger().error(f"Unsupported API type: {api_type}")
+            self.get_logger().error(f'Unsupported API type: {api_type}')
 
     def _load_tools(self) -> (list, dict):
         """
@@ -342,7 +341,7 @@ class LLMNode(Node):
             return [], {}
 
         self.get_logger().info(
-            f"Loading tool interfaces: {tool_modules_paths}")
+            f'Loading tool interfaces: {tool_modules_paths}')
 
         all_tools = []
         all_functions = {}
@@ -355,10 +354,10 @@ class LLMNode(Node):
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                     self.get_logger().debug(
-                        f"Imported module from file: {path_str}")
+                        f'Imported module from file: {path_str}')
                 else:
                     module = importlib.import_module(path_str)
-                    self.get_logger().info(f"Imported module by name: {path_str}")
+                    self.get_logger().info(f'Imported module by name: {path_str}')
 
                 # Use the module's register function if it exists, otherwise use the default
                 if hasattr(module, 'register') and callable(getattr(module, 'register')):
@@ -377,10 +376,10 @@ class LLMNode(Node):
                         all_functions[func_name] = getattr(module, func_name)
 
             except ImportError as e:
-                self.get_logger().error(f"Failed to import tool module {path_str}: {e}")
+                self.get_logger().error(f'Failed to import tool module {path_str}: {e}')
             except Exception as e:
                 self.get_logger().error(
-                    f"Error loading tools from {path_str}: {e}")
+                    f'Error loading tools from {path_str}: {e}')
 
         return all_tools, all_functions
 
@@ -392,12 +391,12 @@ class LLMNode(Node):
         :param assistant_message: The final message dictionary from the assistant.
         """
         try:
-            user_msg = {"role": "user", "content": user_prompt}
+            user_msg = {'role': 'user', 'content': user_prompt}
             latest_turn_list = [user_msg, assistant_message]
             json_string = json.dumps(latest_turn_list)
             self.pub_latest_turn.publish(String(data=json_string))
         except TypeError as e:
-            self.get_logger().error(f"Failed to serialize latest turn to JSON: {e}")
+            self.get_logger().error(f'Failed to serialize latest turn to JSON: {e}')
 
         # --- Log to file ---
         log_file_path = self.get_parameter('message_log').value
@@ -417,9 +416,9 @@ class LLMNode(Node):
             if not log_data:
                 system_prompt = self.get_parameter('system_prompt').value
                 if system_prompt:
-                    log_data.append({"role": "system", "content": system_prompt})
+                    log_data.append({'role': 'system', 'content': system_prompt})
 
-            log_data.append({"role": "user", "content": user_prompt})
+            log_data.append({'role': 'user', 'content': user_prompt})
             log_data.append(assistant_message)
 
             with open(log_file_path, 'w', encoding='utf-8') as f:
@@ -433,21 +432,21 @@ class LLMNode(Node):
         truncated_history = []
         for msg in self.chat_history:
             msg_copy = msg.copy()
-            if isinstance(msg_copy.get("content"), list):
+            if isinstance(msg_copy.get('content'), list):
                 new_content = []
-                for part in msg_copy["content"]:
-                    if isinstance(part, dict) and part.get("type") == "image_url":
+                for part in msg_copy['content']:
+                    if isinstance(part, dict) and part.get('type') == 'image_url':
                         part_copy = part.copy()
-                        if "image_url" in part_copy and "url" in part_copy["image_url"]:
-                            url = part_copy["image_url"]["url"]
+                        if 'image_url' in part_copy and 'url' in part_copy['image_url']:
+                            url = part_copy['image_url']['url']
                             if len(url) > 100:
-                                part_copy["image_url"] = {
-                                    "url": f"{url[:30]}...<truncated>...{url[-30:]}"
+                                part_copy['image_url'] = {
+                                    'url': f'{url[:30]}...<truncated>...{url[-30:]}'
                                 }
                         new_content.append(part_copy)
                     else:
                         new_content.append(part)
-                msg_copy["content"] = new_content
+                msg_copy['content'] = new_content
             truncated_history.append(msg_copy)
         return truncated_history
 
@@ -469,10 +468,10 @@ class LLMNode(Node):
             trimmed_conversation = conversation[first_turn_to_keep_idx:]
             self.chat_history = prefix + trimmed_conversation
             self.get_logger().info(
-                f"Trimmed {num_turns - max_len} old turn(s) from chat history.")
+                f'Trimmed {num_turns - max_len} old turn(s) from chat history.')
 
         self.get_logger().debug(
-            f"History: {str(self._get_truncated_history())}")
+            f'History: {str(self._get_truncated_history())}')
 
     def prompt_callback(self, msg):
         """Process an incoming prompt from the 'llm_prompt' topic."""
@@ -490,7 +489,7 @@ class LLMNode(Node):
         if self._is_generating:
             self._prompt_queue.append(msg.data)
             self.get_logger().info(
-                f"Queued prompt. Queue size: {len(self._prompt_queue)}")
+                f'Queued prompt. Queue size: {len(self._prompt_queue)}')
             if self._queue_timer is None:
                 self._queue_timer = self.create_timer(
                     self._queue_timer_period,
@@ -504,10 +503,10 @@ class LLMNode(Node):
 
         try:
             if not self.llm_client:
-                self.get_logger().error("LLM client not available.")
+                self.get_logger().error('LLM client not available.')
                 return
 
-            self.get_logger().info("Prompt received")
+            self.get_logger().info('Prompt received')
             prompt_text_for_log = msg.data
             new_messages = []
 
@@ -516,58 +515,58 @@ class LLMNode(Node):
                 if isinstance(json_data, list):
                     new_messages = json_data
                     for m in reversed(new_messages):
-                        if isinstance(m, dict) and m.get("role") == "user":
-                            c = m.get("content", "")
+                        if isinstance(m, dict) and m.get('role') == 'user':
+                            c = m.get('content', '')
                             if isinstance(c, str):
                                 prompt_text_for_log = c
                             break
                 elif isinstance(json_data, dict):
                     user_content = json_data
-                    if json_data.get("role") == "user":
-                        c = json_data.get("content", "")
+                    if json_data.get('role') == 'user':
+                        c = json_data.get('content', '')
                         if isinstance(c, str):
                             prompt_text_for_log = c
 
                         process_img = self.get_parameter('process_image_urls').value
-                        if process_img and "image_url" in json_data:
-                            image_url = json_data["image_url"]
+                        if process_img and 'image_url' in json_data:
+                            image_url = json_data['image_url']
                             try:
                                 image_data = None
-                                if image_url.startswith("file://"):
+                                if image_url.startswith('file://'):
                                     file_path = image_url[7:]
-                                    with open(file_path, "rb") as image_file:
+                                    with open(file_path, 'rb') as image_file:
                                         mime_type, _ = mimetypes.guess_type(file_path)
                                         if not mime_type:
-                                            mime_type = "image/jpeg"
+                                            mime_type = 'image/jpeg'
                                         b64 = base64.b64encode(
                                             image_file.read()).decode('utf-8')
-                                        image_data = f"data:{mime_type};base64,{b64}"
-                                elif image_url.startswith("http"):
+                                        image_data = f'data:{mime_type};base64,{b64}'
+                                elif image_url.startswith('http'):
                                     response = requests.get(image_url, timeout=10.0)
                                     response.raise_for_status()
                                     m_t = response.headers.get(
                                         'Content-Type', 'image/jpeg')
                                     b64 = base64.b64encode(
                                         response.content).decode('utf-8')
-                                    image_data = f"data:{m_t};base64,{b64}"
+                                    image_data = f'data:{m_t};base64,{b64}'
 
                                 if image_data:
                                     user_content = {
-                                        "role": "user",
-                                        "content": [
-                                            {"type": "text", "text": json_data.get("content", "")},
-                                            {"type": "image_url", "image_url": {"url": image_data}}
+                                        'role': 'user',
+                                        'content': [
+                                            {'type': 'text', 'text': json_data.get('content', '')},
+                                            {'type': 'image_url', 'image_url': {'url': image_data}}
                                         ]
                                     }
                             except Exception as e:
-                                self.get_logger().error(f"Image processing failed: {e}")
+                                self.get_logger().error(f'Image processing failed: {e}')
 
                     new_messages = [user_content]
                 else:
-                    new_messages = [{"role": "user", "content": str(json_data)}]
+                    new_messages = [{'role': 'user', 'content': str(json_data)}]
                     prompt_text_for_log = str(json_data)
             except json.JSONDecodeError:
-                new_messages = [{"role": "user", "content": msg.data}]
+                new_messages = [{'role': 'user', 'content': msg.data}]
                 prompt_text_for_log = msg.data
 
             self.chat_history.extend(new_messages)
@@ -587,16 +586,16 @@ class LLMNode(Node):
                 )
 
                 if not success:
-                    self.get_logger().error(f"LLM request error: {response_message}")
+                    self.get_logger().error(f'LLM request error: {response_message}')
                     self.chat_history.pop()
                     return
 
-                if response_message.get("tool_calls"):
-                    if response_message.get("content") is None:
-                        response_message["content"] = ""
+                if response_message.get('tool_calls'):
+                    if response_message.get('content') is None:
+                        response_message['content'] = ''
                     self.chat_history.append(response_message)
                     tool_call_count += 1
-                    for tool_call in response_message["tool_calls"]:
+                    for tool_call in response_message['tool_calls']:
                         if self._cancel_requested:
                             return
 
@@ -608,8 +607,8 @@ class LLMNode(Node):
                             err = f"Tool '{func_name}' not found."
                             self.get_logger().error(err)
                             self.chat_history.append({
-                                "tool_call_id": tool_call_id, "role": "tool",
-                                "name": func_name, "content": err})
+                                'tool_call_id': tool_call_id, 'role': 'tool',
+                                'name': func_name, 'content': err})
                             continue
 
                         try:
@@ -619,52 +618,52 @@ class LLMNode(Node):
                             c_str = (result if isinstance(result, str)
                                      else json.dumps(result, ensure_ascii=False))
                             self.chat_history.append({
-                                "tool_call_id": tool_call_id, "role": "tool",
-                                "name": func_name, "content": c_str})
+                                'tool_call_id': tool_call_id, 'role': 'tool',
+                                'name': func_name, 'content': c_str})
                         except Exception as e:
-                            self.get_logger().error(f"Tool {func_name} failed: {e}")
+                            self.get_logger().error(f'Tool {func_name} failed: {e}')
                             self.chat_history.append({
-                                "tool_call_id": tool_call_id, "role": "tool",
-                                "name": func_name, "content": str(e)})
+                                'tool_call_id': tool_call_id, 'role': 'tool',
+                                'name': func_name, 'content': str(e)})
                     continue
                 else:
                     break
 
             if tool_call_count >= max_calls:
-                err = f"Max tool calls ({max_calls}) reached."
+                err = f'Max tool calls ({max_calls}) reached.'
                 self.get_logger().warning(err)
-                self.pub_response.publish(String(data="Too many tool calls."))
+                self.pub_response.publish(String(data='Too many tool calls.'))
                 return
 
             if self._cancel_requested:
                 return
 
             if stream_enabled:
-                full_response = ""
+                full_response = ''
                 for chunk in self.llm_client.stream_prompt(self.chat_history):
                     if self._cancel_requested:
-                        self.pub_response.publish(String(data="[Cancelled]"))
+                        self.pub_response.publish(String(data='[Cancelled]'))
                         return
                     if chunk:
                         full_response += chunk
                         self.pub_stream.publish(String(data=chunk))
 
                 self.pub_response.publish(String(data=full_response))
-                assistant_message = {"role": "assistant", "content": full_response}
+                assistant_message = {'role': 'assistant', 'content': full_response}
                 self.chat_history.append(assistant_message)
                 self._publish_latest_turn(prompt_text_for_log, assistant_message)
             else:
                 success, final_message = self.llm_client.process_prompt(self.chat_history)
                 if self._cancel_requested:
                     return
-                if success and final_message.get("content"):
-                    res_text = final_message["content"]
+                if success and final_message.get('content'):
+                    res_text = final_message['content']
                     self.pub_response.publish(String(data=res_text))
                     self.chat_history.append(final_message)
                     self._publish_latest_turn(prompt_text_for_log, final_message)
                 else:
-                    self.get_logger().error(f"Failed response: {final_message}")
-                    self.pub_response.publish(String(data="Error generating response."))
+                    self.get_logger().error(f'Failed response: {final_message}')
+                    self.pub_response.publish(String(data='Error generating response.'))
         finally:
             self._is_generating = False
 
@@ -691,7 +690,7 @@ def main(args=None):
     try:
         executor.spin()
     except KeyboardInterrupt:
-        llm_node.get_logger().info("Shutting down node...")
+        llm_node.get_logger().info('Shutting down node...')
     finally:
         llm_node.destroy_node()
         rclpy.shutdown()

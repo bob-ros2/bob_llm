@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import json
-
 import requests
 
 
@@ -51,13 +50,13 @@ class OpenAICompatibleClient:
         :param timeout: Timeout in seconds for API requests.
         :param response_format: Optional dict for structured output.
         """
-        self.api_url = api_url.rstrip('/') + "/v1/chat/completions"
+        self.api_url = api_url.rstrip('/') + '/v1/chat/completions'
         self.api_key = api_key
         self.model = model
         self.logger = logger
-        self.headers = {"Content-Type": "application/json"}
+        self.headers = {'Content-Type': 'application/json'}
         if api_key:
-            self.headers["Authorization"] = f"Bearer {api_key}"
+            self.headers['Authorization'] = f'Bearer {api_key}'
 
         self.temperature = temperature
         self.top_p = top_p
@@ -86,19 +85,19 @@ class OpenAICompatibleClient:
         sanitized_history = []
         for msg in history:
             msg_copy = msg.copy()
-            content = msg_copy.get("content")
+            content = msg_copy.get('content')
             if content is None:
-                msg_copy["content"] = ""
+                msg_copy['content'] = ''
             elif not isinstance(content, str):
                 if isinstance(content, (list, dict)):
-                    msg_copy["content"] = json.dumps(content)
+                    msg_copy['content'] = json.dumps(content)
                 else:
-                    msg_copy["content"] = str(content)
+                    msg_copy['content'] = str(content)
             sanitized_history.append(msg_copy)
 
         payload = {
-            "model": self.model,
-            "messages": sanitized_history,
+            'model': self.model,
+            'messages': sanitized_history,
         }
 
         # Add parameters. Honor the "don't set both temp and top_p" convention.
@@ -109,34 +108,36 @@ class OpenAICompatibleClient:
 
         if self.max_tokens > 0:
             payload['max_tokens'] = self.max_tokens
+
         if self.stop:
             payload['stop'] = self.stop
+
         if self.presence_penalty != 0.0:
             payload['presence_penalty'] = self.presence_penalty
+
         if self.frequency_penalty != 0.0:
             payload['frequency_penalty'] = self.frequency_penalty
 
+        if self.response_format:
+            payload['response_format'] = self.response_format
+
         if tools:
             payload['tools'] = tools
-            payload['tool_choice'] = 'auto'
 
         if stream:
             payload['stream'] = True
-
-        if self.response_format:
-            payload['response_format'] = self.response_format
 
         return payload
 
     def process_prompt(self, history: list, tools: list = None) -> (bool, dict):
         """
-        Send a non-streaming request to the LLM to get a complete response.
+        Send a blocking prompt request to the LLM.
 
         :param history: The list of messages in the chat history.
         :param tools: An optional list of tool definitions.
-        :return: A tuple containing (success, message).
+        :return: A tuple (success, message_dict).
         """
-        payload = self._build_payload(history, tools, stream=False)
+        payload = self._build_payload(history, tools=tools, stream=False)
 
         try:
             response = requests.post(
@@ -152,50 +153,50 @@ class OpenAICompatibleClient:
             return True, message
 
         except requests.exceptions.RequestException as e:
-            error_msg = f"API request failed: {e}"
+            error_msg = f'API request failed: {e}'
             if self.logger:
                 self.logger.error(error_msg)
-            return False, error_msg
+            return False, {'role': 'assistant', 'content': error_msg}
 
-    def stream_prompt(self, history: list, tools: list = None):
+    def process_prompt_stream(self, history: list, tools: list = None):
         """
-        Send a streaming request to the LLM and yield response chunks.
+        Send a streaming prompt request to the LLM.
 
         :param history: The list of messages in the chat history.
         :param tools: An optional list of tool definitions.
-        :yield: String chunks of the generated text content.
+        :yield: Chunks of the response string or error messages.
         """
-        payload = self._build_payload(history, tools, stream=True)
+        payload = self._build_payload(history, tools=tools, stream=True)
 
         try:
-            with requests.post(
+            response = requests.post(
                 self.api_url,
                 headers=self.headers,
                 json=payload,
-                stream=True,
-                timeout=self.timeout
-            ) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    if line:
-                        line_str = line.decode('utf-8')
-                        if line_str.startswith('data: '):
-                            json_str = line_str[6:]
-                            if json_str.strip() == '[DONE]':
-                                break
-                            try:
-                                data = json.loads(json_str)
-                                if 'choices' in data and data['choices']:
-                                    delta = data['choices'][0].get('delta', {})
-                                    content = delta.get('content')
-                                    if content:
-                                        yield content
-                            except json.JSONDecodeError:
-                                if self.logger:
-                                    self.logger.warning(
-                                        f"Failed to decode stream: {json_str}")
+                timeout=self.timeout,
+                stream=True
+            )
+            response.raise_for_status()
+
+            for line in response.iter_lines():
+                if line:
+                    line_str = line.decode('utf-8')
+                    if line_str.startswith('data: '):
+                        json_str = line_str[6:]
+                        if json_str == '[DONE]':
+                            break
+                        try:
+                            chunk = json.loads(json_str)
+                            if 'choices' in chunk and len(chunk['choices']) > 0:
+                                delta = chunk['choices'][0].get('delta', {})
+                                if 'content' in delta and delta['content']:
+                                    yield delta['content']
+                        except json.JSONDecodeError:
+                            if self.logger:
+                                self.logger.warning(
+                                    f'Failed to decode stream: {json_str}')
         except requests.exceptions.RequestException as e:
-            error_msg = f"API stream request failed: {e}"
+            error_msg = f'API stream request failed: {e}'
             if self.logger:
                 self.logger.error(error_msg)
-            yield f"[ERROR: {error_msg}]"
+            yield f'[ERROR: {error_msg}]'

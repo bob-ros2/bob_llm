@@ -33,7 +33,7 @@ server_env = os.environ.copy()
 server_env.setdefault('COLLECTION_NAME', 'llm_memory')
 
 SERVER_PARAMS = StdioServerParameters(
-    command="mcp-server-qdrant",
+    command='mcp-server-qdrant',
     args=[],
     env=server_env
 )
@@ -55,10 +55,10 @@ async def _run_mcp_tool(tool_name: str, arguments: Dict[str, Any]) -> str:
             # Parse and return the content
             output_text = []
             for content in result.content:
-                if content.type == "text":
+                if content.type == 'text':
                     output_text.append(content.text)
 
-            return "\n".join(output_text)
+            return '\n'.join(output_text)
 
 
 def _sync_wrapper(coro):
@@ -73,7 +73,7 @@ def _sync_wrapper(coro):
 
 # --- Exposed Tools for bob_llm ---
 
-def save_memory(information: str, metadata: str = "{}") -> str:
+def save_memory(information: str, metadata: str = '{}') -> str:
     """
     Store information (memory) into the Qdrant vector database.
 
@@ -84,14 +84,14 @@ def save_memory(information: str, metadata: str = "{}") -> str:
     try:
         meta_dict = json.loads(metadata)
     except json.JSONDecodeError:
-        meta_dict = {"raw_metadata": metadata}
+        meta_dict = {'raw_metadata': metadata}
 
     # The tool name in mcp-server-qdrant is typically 'qdrant-store'
-    tool_name = "qdrant-store"
+    tool_name = 'qdrant-store'
 
     arguments = {
-        "information": information,
-        "metadata": meta_dict
+        'information': information,
+        'metadata': meta_dict
     }
 
     return _sync_wrapper(_run_mcp_tool(tool_name, arguments))
@@ -103,10 +103,10 @@ def search_memory(query: str) -> str:
 
     :param query: The question or topic to search for in the memory.
     """
-    tool_name = "qdrant-find"
+    tool_name = 'qdrant-find'
 
     arguments = {
-        "query": query
+        'query': query
     }
 
     return _sync_wrapper(_run_mcp_tool(tool_name, arguments))
