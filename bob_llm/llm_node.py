@@ -236,7 +236,8 @@ class LLMNode(Node):
         # Load tools and their corresponding functions
         self.tools, self.tool_functions = self._load_tools()
         if self.tools:
-            self.get_logger().info(f"Successfully loaded {len(self.tools)} tools.")
+            self.get_logger().info(
+                f"Successfully loaded {len(self.tools)} tools.")
 
         DEFAULT_QUEUE_SIZE = int(os.environ.get('LLM_QUEUE_SIZE', '1000'))
 
@@ -470,7 +471,8 @@ class LLMNode(Node):
             self.get_logger().info(
                 f"Trimmed {num_turns - max_len} old turn(s) from chat history.")
 
-        self.get_logger().debug(f"History: {str(self._get_truncated_history())}")
+        self.get_logger().debug(
+            f"History: {str(self._get_truncated_history())}")
 
     def prompt_callback(self, msg):
         """Process an incoming prompt from the 'llm_prompt' topic."""
@@ -487,7 +489,8 @@ class LLMNode(Node):
         # --- Busy Check ---
         if self._is_generating:
             self._prompt_queue.append(msg.data)
-            self.get_logger().info(f"Queued prompt. Queue size: {len(self._prompt_queue)}")
+            self.get_logger().info(
+                f"Queued prompt. Queue size: {len(self._prompt_queue)}")
             if self._queue_timer is None:
                 self._queue_timer = self.create_timer(
                     self._queue_timer_period,
@@ -536,13 +539,16 @@ class LLMNode(Node):
                                         mime_type, _ = mimetypes.guess_type(file_path)
                                         if not mime_type:
                                             mime_type = "image/jpeg"
-                                        b64 = base64.b64encode(image_file.read()).decode('utf-8')
+                                        b64 = base64.b64encode(
+                                            image_file.read()).decode('utf-8')
                                         image_data = f"data:{mime_type};base64,{b64}"
                                 elif image_url.startswith("http"):
                                     response = requests.get(image_url, timeout=10.0)
                                     response.raise_for_status()
-                                    m_t = response.headers.get('Content-Type', 'image/jpeg')
-                                    b64 = base64.b64encode(response.content).decode('utf-8')
+                                    m_t = response.headers.get(
+                                        'Content-Type', 'image/jpeg')
+                                    b64 = base64.b64encode(
+                                        response.content).decode('utf-8')
                                     image_data = f"data:{m_t};base64,{b64}"
 
                                 if image_data:

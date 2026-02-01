@@ -67,7 +67,12 @@ class OpenAICompatibleClient:
         self.timeout = timeout
         self.response_format = response_format
 
-    def _build_payload(self, history: list, tools: list = None, stream: bool = False) -> dict:
+    def _build_payload(
+        self,
+        history: list,
+        tools: list = None,
+        stream: bool = False
+    ) -> dict:
         """
         Construct the JSON payload for an API request.
 
@@ -142,7 +147,7 @@ class OpenAICompatibleClient:
             response.raise_for_status()
             message = response.json()['choices'][0]['message']
 
-            # Return the entire message dictionary to handle both text and tool calls.
+            # Return message dictionary for text and tool calls.
             return True, message
 
         except requests.exceptions.RequestException as e:
@@ -187,7 +192,7 @@ class OpenAICompatibleClient:
                             except json.JSONDecodeError:
                                 if self.logger:
                                     self.logger.warning(
-                                        f"Could not decode JSON from stream: {json_str}")
+                                        f"Failed to decode stream: {json_str}")
         except requests.exceptions.RequestException as e:
             error_msg = f"API stream request failed: {e}"
             if self.logger:
