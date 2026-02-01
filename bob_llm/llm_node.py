@@ -13,23 +13,23 @@
 # limitations under the License.
 
 import base64
+from collections import deque
 import importlib
 import importlib.util
 import json
 import logging
 import mimetypes
 import os
-from collections import deque
 
-import requests
-import rclpy
 from ament_index_python.packages import get_package_share_directory
 from rcl_interfaces.msg import ParameterDescriptor
 from rcl_interfaces.msg import ParameterType
+import rclpy
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.logging import LoggingSeverity
 from rclpy.node import Node
+import requests
 from std_msgs.msg import String
 
 from bob_llm.backend_clients import OpenAICompatibleClient
@@ -474,7 +474,7 @@ class LLMNode(Node):
             f'History: {str(self._get_truncated_history())}')
 
     def prompt_callback(self, msg):
-        """Process an incoming prompt from the 'llm_prompt' topic."""
+        """Process an incoming prompt from the 'llm_prompt' topic Lot of changes."""
         # --- Cancellation Check ---
         stop_list = self.get_parameter('stop').value
         if msg.data in stop_list:
