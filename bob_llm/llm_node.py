@@ -18,13 +18,12 @@ import importlib.util
 import json
 import logging
 import mimetypes
+import requests
 import os
 from collections import deque
 
 import rclpy
 from ament_index_python.packages import get_package_share_directory
-from bob_llm.backend_clients import OpenAICompatibleClient
-from bob_llm.tool_utils import register as default_register
 from rcl_interfaces.msg import ParameterDescriptor
 from rcl_interfaces.msg import ParameterType
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -32,6 +31,9 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.logging import LoggingSeverity
 from rclpy.node import Node
 from std_msgs.msg import String
+
+from bob_llm.backend_clients import OpenAICompatibleClient
+from bob_llm.tool_utils import register as default_register
 
 
 class LLMNode(Node):
@@ -533,7 +535,6 @@ class LLMNode(Node):
                                         b64 = base64.b64encode(image_file.read()).decode('utf-8')
                                         image_data = f"data:{mime_type};base64,{b64}"
                                 elif image_url.startswith("http"):
-                                    import requests
                                     response = requests.get(image_url, timeout=10.0)
                                     response.raise_for_status()
                                     m_t = response.headers.get('Content-Type', 'image/jpeg')
