@@ -16,12 +16,11 @@
 
 import subprocess
 from typing import Any, List
-import yaml
-
-import rclpy
 
 from bob_llm.tool_utils import register as default_register
 from bob_llm.tool_utils import Tool
+import rclpy
+import yaml
 
 
 class _NodeContext:
@@ -64,7 +63,7 @@ def _run_ros_command(command: List[str], timeout: float = 10.0) -> str:
         cmd_str = ' '.join(command)
         error_message = f"Command '{cmd_str}' failed with return code {e.returncode}.\n"
         if e.stderr:
-            error_message += f"Stderr: {e.stderr.strip()}"
+            error_message += f'Stderr: {e.stderr.strip()}'
         return error_message
     except subprocess.TimeoutExpired:
         cmd_str = ' '.join(command)
