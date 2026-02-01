@@ -31,9 +31,18 @@ jobs:
           rosdep update
           rosdep install --from-paths src --ignore-src -r -y --rosdistro ${{ matrix.ros_distro }}
 
-      - name: Build and Test
+      - name: Build
         run: |
           . /opt/ros/${{ matrix.ros_distro }}/setup.sh
           colcon build --packages-select bob_llm --event-handlers console_direct+
+
+      - name: Test
+        run: |
+          . /opt/ros/${{ matrix.ros_distro }}/setup.sh
           colcon test --packages-select bob_llm --event-handlers console_direct+ --return-code-on-test-failure
+
+      - name: Report Test Results
+        if: always()
+        run: |
+          . /opt/ros/${{ matrix.ros_distro }}/setup.sh
           colcon test-result --all --verbose

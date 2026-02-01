@@ -16,9 +16,9 @@
 import os
 import subprocess
 from typing import Any, List
+import yaml
 
 import rclpy
-import yaml
 
 from bob_llm.tool_utils import Tool
 from bob_llm.tool_utils import register as default_register
