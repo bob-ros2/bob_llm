@@ -2,6 +2,11 @@
 Changelog for package bob_llm
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.0.2 (2026-02-01)
+------------------
+* Full ROS 2 Rolling and Humble compliance (fixed linter issues)
+* Standardized import ordering and quote usage
+
 1.0.1 (2026-01-26)
 ------------------
 * Fix 270+ linter and style issues for ROS2 compliance

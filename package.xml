@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>bob_llm</name>
-  <version>1.0.1</version>
+  <version>1.0.2</version>
   <description>ROS package for interfacing with LLM's and VLM's using OpenAI compatible API.</description>
   <maintainer email="bobmeuchelm@gmail.com">Bob Ros</maintainer>
   <license>Apache-2.0</license>
