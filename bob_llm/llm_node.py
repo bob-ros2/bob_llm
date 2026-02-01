@@ -18,9 +18,10 @@ import importlib.util
 import json
 import logging
 import mimetypes
-import requests
 import os
 from collections import deque
+
+import requests
 
 import rclpy
 from ament_index_python.packages import get_package_share_directory
@@ -290,7 +291,8 @@ class LLMNode(Node):
                 "LLM URL not configured. Please set 'api_url' parameter.")
             return
 
-        self.get_logger().info(f"Connecting to LLM at {api_url} with model {model}")
+        self.get_logger().info(
+            f"Connecting to LLM at {api_url} with model {model}")
 
         if api_type == 'openai_compatible':
 
@@ -307,7 +309,8 @@ class LLMNode(Node):
                     response_format = json.loads(response_format_str)
                     self.get_logger().info(f"Using response_format: {response_format}")
                 except json.JSONDecodeError as e:
-                    self.get_logger().error(f"Failed to parse 'response_format' JSON: {e}")
+                    self.get_logger().error(
+                        f"Failed to parse 'response_format' JSON: {e}")
 
             self.llm_client = OpenAICompatibleClient(
                 api_url=self.get_parameter('api_url').value,
@@ -375,7 +378,8 @@ class LLMNode(Node):
             except ImportError as e:
                 self.get_logger().error(f"Failed to import tool module {path_str}: {e}")
             except Exception as e:
-                self.get_logger().error(f"Error loading tools from {path_str}: {e}")
+                self.get_logger().error(
+                    f"Error loading tools from {path_str}: {e}")
 
         return all_tools, all_functions
 

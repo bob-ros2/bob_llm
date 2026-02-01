@@ -35,5 +35,5 @@ jobs:
         run: |
           . /opt/ros/${{ matrix.ros_distro }}/setup.sh
           colcon build --packages-select bob_llm --event-handlers console_direct+
-          colcon test --packages-select bob_llm --event-handlers console_direct+
+          colcon test --packages-select bob_llm --event-handlers console_direct+ --return-code-on-test-failure --output-on-failure
           colcon test-result --all
