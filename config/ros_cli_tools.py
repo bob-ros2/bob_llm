@@ -16,12 +16,12 @@
 
 import subprocess
 from typing import Any, List
-
-import rclpy
 import yaml
 
-from bob_llm.tool_utils import Tool
+import rclpy
+
 from bob_llm.tool_utils import register as default_register
+from bob_llm.tool_utils import Tool
 
 
 class _NodeContext:
@@ -62,15 +62,15 @@ def _run_ros_command(command: List[str], timeout: float = 10.0) -> str:
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         cmd_str = ' '.join(command)
-        error_message = f'Command \'{cmd_str}\' failed with return code {e.returncode}.\n'
+        error_message = f"Command '{cmd_str}' failed with return code {e.returncode}.\n"
         if e.stderr:
-            error_message += f'Stderr: {e.stderr.strip()}'
+            error_message += f"Stderr: {e.stderr.strip()}"
         return error_message
     except subprocess.TimeoutExpired:
         cmd_str = ' '.join(command)
-        return f'Command \'{cmd_str}\' timed out after {timeout} seconds.'
+        return f"Command '{cmd_str}' timed out after {timeout} seconds."
     except FileNotFoundError:
-        return 'Error: \'ros2\' command not found. Please ensure ROS 2 is installed.'
+        return "Error: 'ros2' command not found. Please ensure ROS 2 is installed."
 
 
 # --- Tool Definitions ---
@@ -141,7 +141,7 @@ def get_parameter(node_name: str, param_name: str) -> str:
     if _NodeContext.node and _NodeContext.node.get_fully_qualified_name() == node_name:
         param = _NodeContext.node.get_parameter(param_name)
         if param:
-            return (f'Parameter \'{param_name}\' on node \'{node_name}\' is '
+            return (f"Parameter '{param_name}' on node '{node_name}' is "
                     f'set to: {param.value}')
     return _run_ros_command(['ros2', 'param', 'get', node_name, param_name])
 
@@ -151,7 +151,7 @@ def list_parameters(node_name: str) -> str:
     if _NodeContext.node and _NodeContext.node.get_fully_qualified_name() == node_name:
         params = _NodeContext.node._parameters.keys()
         params_str = ', '.join(params)
-        return f'Parameters for node \'{node_name}\': {params_str}'
+        return f"Parameters for node '{node_name}': {params_str}"
     return _run_ros_command(['ros2', 'param', 'list', node_name])
 
 
@@ -173,9 +173,9 @@ def set_parameter(node_name: str, param_name: str, value: str) -> str:
                 typed_value
             )
             _NodeContext.node.set_parameters([new_param])
-            return (f'Successfully set parameter \'{param_name}\' on '
-                    f'node \'{node_name}\' to {value}.')
+            return (f"Successfully set parameter '{param_name}' on "
+                    f"node '{node_name}' to {value}.")
         except Exception as e:
-            return f'An error occurred while setting parameter \'{param_name}\': {e}'
+            return f"An error occurred while setting parameter '{param_name}': {e}"
 
     return _run_ros_command(['ros2', 'param', 'set', node_name, param_name, value])
