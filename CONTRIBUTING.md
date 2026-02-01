@@ -1,23 +1,13 @@
-# Contributing to bob_llm
+Any contribution that you make to this repository will
+be under the Apache 2 License, as dictated by that
+[license](http://www.apache.org/licenses/LICENSE-2.0.html):
 
-Thank you for your interest in contributing to `bob_llm`!
-
-## How to Contribute
-
-1. **Report Bugs**: If you find a bug, please open an issue on GitHub.
-2. **Suggest Features**: We welcome feature requests via GitHub issues.
-3. **Pull Requests**:
-   - Fork the repository.
-   - Create a feature branch.
-   - Ensure your code follows the existing style (flake8, pep257).
-   - Ensure `colcon test` passes.
-   - Submit a pull request.
-
-## Style Guide
-
-- Follow ROS 2 Python Style Guidelines (PEP 8, PEP 257).
-- Include copyright headers in all new files.
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE).
+~~~
+5. Submission of Contributions. Unless You explicitly state otherwise,
+   any Contribution intentionally submitted for inclusion in the Work
+   by You to the Licensor shall be under the terms and conditions of
+   this License, without any additional terms or conditions.
+   Notwithstanding the above, nothing herein shall supersede or modify
+   the terms of any separate license agreement you may have executed
+   with Licensor regarding such Contributions.
+~~~
