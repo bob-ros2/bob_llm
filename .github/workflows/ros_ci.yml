@@ -22,16 +22,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          path: src/bob_llm
 
       - name: Install dependencies
         run: |
           apt-get update
           rosdep update
-          rosdep install --from-paths . --ignore-src -r -y --rosdistro ${{ matrix.ros_distro }}
+          rosdep install --from-paths src --ignore-src -r -y --rosdistro ${{ matrix.ros_distro }}
 
       - name: Build and Test
         run: |
           . /opt/ros/${{ matrix.ros_distro }}/setup.sh
-          colcon build --event-handlers console_direct+
-          colcon test --event-handlers console_direct+
+          colcon build --packages-select bob_llm --event-handlers console_direct+
+          colcon test --packages-select bob_llm --event-handlers console_direct+
           colcon test-result --all
