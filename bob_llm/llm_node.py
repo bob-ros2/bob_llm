@@ -22,6 +22,8 @@ import mimetypes
 import os
 
 from ament_index_python.packages import get_package_share_directory
+from bob_llm.backend_clients import OpenAICompatibleClient
+from bob_llm.tool_utils import register as default_register
 from rcl_interfaces.msg import ParameterDescriptor
 from rcl_interfaces.msg import ParameterType
 import rclpy
@@ -31,9 +33,6 @@ from rclpy.logging import LoggingSeverity
 from rclpy.node import Node
 import requests
 from std_msgs.msg import String
-
-from bob_llm.backend_clients import OpenAICompatibleClient
-from bob_llm.tool_utils import register as default_register
 
 
 class LLMNode(Node):
@@ -474,7 +473,7 @@ class LLMNode(Node):
             f'History: {str(self._get_truncated_history())}')
 
     def prompt_callback(self, msg):
-        """Process an incoming prompt from the 'llm_prompt' topic Lot of changes."""
+        """Process an incoming prompt from the 'llm_prompt' topic."""
         # --- Cancellation Check ---
         stop_list = self.get_parameter('stop').value
         if msg.data in stop_list:

@@ -62,12 +62,14 @@ def _run_ros_command(command: List[str], timeout: float = 10.0) -> str:
         )
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-        error_message = f'Command \'{" ".join(command)}\' failed with return code {e.returncode}.\n'
+        cmd_str = ' '.join(command)
+        error_message = f'Command \'{cmd_str}\' failed with return code {e.returncode}.\n'
         if e.stderr:
             error_message += f'Stderr: {e.stderr.strip()}'
         return error_message
     except subprocess.TimeoutExpired:
-        return f'Command \'{" ".join(command)}\' timed out after {timeout} seconds.'
+        cmd_str = ' '.join(command)
+        return f'Command \'{cmd_str}\' timed out after {timeout} seconds.'
     except FileNotFoundError:
         return 'Error: \'ros2\' command not found. Please ensure ROS 2 is installed.'
 
@@ -139,7 +141,7 @@ def get_parameter(node_name: str, param_name: str) -> str:
         param = _NodeContext.node.get_parameter(param_name)
         if param:
             return (f'Parameter \'{param_name}\' on node \'{node_name}\' is '
-                    f'with value: {param.value}')
+                    f'set to: {param.value}')
     return _run_ros_command(['ros2', 'param', 'get', node_name, param_name])
 
 
@@ -147,7 +149,8 @@ def list_parameters(node_name: str) -> str:
     """List all parameters of a specific ROS 2 node."""
     if _NodeContext.node and _NodeContext.node.get_fully_qualified_name() == node_name:
         params = _NodeContext.node._parameters.keys()
-        return f'Parameters for node \'{node_name}\': {\', \'.join(params)}'
+        params_str = ', '.join(params)
+        return f'Parameters for node \'{node_name}\': {params_str}'
     return _run_ros_command(['ros2', 'param', 'list', node_name])
 
 

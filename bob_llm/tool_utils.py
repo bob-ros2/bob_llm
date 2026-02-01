@@ -18,19 +18,25 @@ from typing import Any, Dict, List, TypedDict
 
 # Typing information for OpenAI-compatible tools
 class FunctionParameters(TypedDict):
-    type: str
+    """Parameters for a function definition."""
+
+    type: str  # noqa: A003
     properties: Dict[str, Any]
     required: List[str]
 
 
 class FunctionDefinition(TypedDict):
+    """Definition of a function for an LLM tool."""
+
     name: str
     description: str
     parameters: FunctionParameters
 
 
 class Tool(TypedDict):
-    type: str
+    """OpenAI-compatible tool definition."""
+
+    type: str  # noqa: A003
     function: FunctionDefinition
 
 
