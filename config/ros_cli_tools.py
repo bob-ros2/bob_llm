@@ -14,7 +14,6 @@
 
 """A tool interface for the LLM node providing ROS 2 CLI functionalities."""
 
-import os
 import subprocess
 from typing import Any, List
 
@@ -92,12 +91,14 @@ def get_topic_info(topic_name: str) -> str:
 
 
 def publish_topic_message(topic_name: str, message_type: str, message_yaml: str) -> str:
-    """
+    r"""
     Publish a message to a ROS 2 topic.
 
     Example: publish_topic_message('/chatter', 'std_msgs/msg/String', 'data: \'hello\'')
     """
-    return _run_ros_command(['ros2', 'topic', 'pub', '--once', topic_name, message_type, message_yaml])
+    return _run_ros_command([
+        'ros2', 'topic', 'pub', '--once', topic_name, message_type, message_yaml
+    ])
 
 
 def echo_topic(topic_name: str, count: int = 1) -> str:
@@ -172,7 +173,8 @@ def set_parameter(node_name: str, param_name: str, value: str) -> str:
                 typed_value
             )
             _NodeContext.node.set_parameters([new_param])
-            return f'Successfully set parameter \'{param_name}\' on node \'{node_name}\' to {value}.'
+            return (f'Successfully set parameter \'{param_name}\' on '
+                    f'node \'{node_name}\' to {value}.')
         except Exception as e:
             return f'An error occurred while setting parameter \'{param_name}\': {e}'
 
