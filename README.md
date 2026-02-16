@@ -119,7 +119,7 @@ All parameters can be set via a YAML file, command-line arguments, or environmen
 | Parameter                 | Type         | Default                        | Environment Variable          | Description                                                                          |
 | ------------------------- | ------------ | ------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------ |
 | `api_type`                | string       | `openai_compatible`            | `LLM_API_TYPE`                | The type of the LLM backend API. Currently only `openai_compatible` is supported.    |
-| `api_url`                 | string       | `http://localhost:8000`        | `LLM_API_URL`                 | The base URL of the LLM backend. The node appends `/v1/chat/completions` automatically.|
+| `api_url`                 | string       | `http://localhost:8000/v1`     | `LLM_API_URL`                 | The base URL of the LLM backend. The node appends `/chat/completions` automatically. |
 | `api_key`                 | string       | `no_key`                       | `LLM_API_KEY`                 | The API key (Bearer token) for authentication with the LLM backend, if required.       |
 | `api_model`               | string       | `""`                           | `LLM_API_MODEL`               | The specific model name to use (e.g., "gpt-4", "llama3").                              |
 | `api_timeout`             | double       | `120.0`                        | `LLM_API_TIMEOUT`             | Timeout in seconds for API requests to the LLM backend.                                |

@@ -2,6 +2,10 @@
 Changelog for package bob_llm
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.0.3 (2026-02-10)
+------------------
+* Removed prefix v1 from chat API path
+
 1.0.2 (2026-02-01)
 ------------------
 * Full ROS 2 Rolling and Humble compliance (fixed linter issues)

@@ -51,7 +51,7 @@ class OpenAICompatibleClient:
         :param timeout: Timeout in seconds for API requests.
         :param response_format: Optional dict for structured output.
         """
-        self.api_url = api_url.rstrip('/') + '/v1/chat/completions'
+        self.api_url = api_url.rstrip('/') + '/chat/completions'
         self.api_key = api_key
         self.model = model
         self.logger = logger
@@ -183,8 +183,8 @@ class OpenAICompatibleClient:
                 if line:
                     line_str = line.decode('utf-8')
                     if line_str.startswith('data: '):
-                        json_str = line_str[6:]
-                        if json_str == '[DONE]':
+                        json_str = line_str[6:].strip()
+                        if not json_str or json_str == '[DONE]':
                             break
                         try:
                             chunk = json.loads(json_str)
@@ -192,10 +192,10 @@ class OpenAICompatibleClient:
                                 delta = chunk['choices'][0].get('delta', {})
                                 if 'content' in delta and delta['content']:
                                     yield delta['content']
-                        except json.JSONDecodeError:
+                        except json.JSONDecodeError as e:
                             if self.logger:
                                 self.logger.warning(
-                                    f'Failed to decode stream: {json_str}')
+                                    f'Failed to decode stream chunk: {json_str}. Error: {e}')
         except requests.exceptions.RequestException as e:
             error_msg = f'API stream request failed: {e}'
             if self.logger:

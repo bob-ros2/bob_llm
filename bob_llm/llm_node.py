@@ -75,10 +75,10 @@ class LLMNode(Node):
         )
         self.declare_parameter(
             'api_url',
-            os.environ.get('LLM_API_URL', 'http://localhost:8000'),
+            os.environ.get('LLM_API_URL', 'http://localhost:8000/v1'),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description='The base URL of the LLM backend API.'
+                description='The base URL of the LLM backend API. The node appends "/chat/completions" automatically.'
             )
         )
         self.declare_parameter(
@@ -639,7 +639,7 @@ class LLMNode(Node):
 
             if stream_enabled:
                 full_response = ''
-                for chunk in self.llm_client.stream_prompt(self.chat_history):
+                for chunk in self.llm_client.process_prompt_stream(self.chat_history):
                     if self._cancel_requested:
                         self.pub_response.publish(String(data='[Cancelled]'))
                         return
