@@ -116,29 +116,29 @@ The node is configured entirely through a ROS parameters YAML file (e.g., `confi
 
 All parameters can be set via a YAML file, command-line arguments, or environment variables. The order of precedence is: command-line arguments > parameters file > environment variables > coded defaults. For array-type parameters, environment variables should be comma-separated strings (e.g., `LLM_STOP="stop1,stop2"`).
 
-| Parameter                 | Type         | Default                        | Environment Variable          | Description                                                                          |
-| ------------------------- | ------------ | ------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------ |
-| `api_type`                | string       | `openai_compatible`            | `LLM_API_TYPE`                | The type of the LLM backend API. Currently only `openai_compatible` is supported.    |
-| `api_url`                 | string       | `http://localhost:8000/v1`     | `LLM_API_URL`                 | The base URL of the LLM backend. The node appends `/chat/completions` automatically. |
-| `api_key`                 | string       | `no_key`                       | `LLM_API_KEY`                 | The API key (Bearer token) for authentication with the LLM backend, if required.       |
-| `api_model`               | string       | `""`                           | `LLM_API_MODEL`               | The specific model name to use (e.g., "gpt-4", "llama3").                              |
-| `api_timeout`             | double       | `120.0`                        | `LLM_API_TIMEOUT`             | Timeout in seconds for API requests to the LLM backend.                                |
-| `system_prompt`           | string       | `""`                           | `LLM_SYSTEM_PROMPT`           | The system prompt to set the LLM's context. If this is a valid file path, the content of the file will be used. |
-| `system_prompt_file`      | string       | `""`                           | `LLM_SYSTEM_PROMPT_FILE`      | Path to a file containing the system prompt. Takes precedence over `system_prompt`. |
-| `initial_messages_json`   | string       | `[]`                           | `LLM_INITIAL_MESSAGES_JSON`   | A JSON string of initial messages for few-shot prompting to guide the LLM.             |
-| `max_history_length`      | integer      | `10`                           | `LLM_MAX_HISTORY_LENGTH`      | Maximum number of user/assistant conversational turns to keep in history.              |
-| `message_log`             | string       | `""`                           | `LLM_MESSAGE_LOG`             | If set to a file path, appends each conversational turn to a persistent JSON log file. |
-| `stream`                  | bool         | `true`                         | `LLM_STREAM`                  | Enable or disable streaming for the final LLM response.                                |
-| `process_image_urls`      | bool         | `false`                        | `LLM_PROCESS_IMAGE_URLS`      | If true, processes `image_url` in JSON prompts by base64 encoding the image.           |
-| `response_format`         | string       | `""`                           | `LLM_RESPONSE_FORMAT`         | JSON string defining the output format. Supports dynamic updates.                      |
-| `max_tool_calls`          | integer      | `5`                            | `LLM_MAX_TOOL_CALLS`          | Maximum number of consecutive tool calls before aborting to prevent loops.           |
-| `temperature`             | double       | `0.7`                          | `LLM_TEMPERATURE`             | Controls the randomness of the output. Supports dynamic updates.                        |
-| `top_p`                   | double       | `1.0`                          | `LLM_TOP_P`                   | Nucleus sampling. Supports dynamic updates.                                            |
-| `max_tokens`              | integer      | `0`                            | `LLM_MAX_TOKENS`              | Maximum number of tokens to generate. Supports dynamic updates.                        |
-| `stop`                    | string array | `["stop_llm"]`                 | `LLM_STOP`                    | A list of sequences to stop generation. Supports dynamic updates.                      |
-| `presence_penalty`        | double       | `0.0`                          | `LLM_PRESENCE_PENALTY`        | Penalizes new tokens. Supports dynamic updates.                                        |
-| `frequency_penalty`       | double       | `0.0`                          | `LLM_FREQUENCY_PENALTY`       | Penalizes frequent tokens. Supports dynamic updates.                                   |
-| `tool_interfaces`         | string array | Path to `example_interface.py` | `LLM_TOOL_INTERFACES`         | A list of absolute paths to Python files containing tool functions.                      |
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `api_type` | string | `openai` | **LLM_API_TYPE**: LLM backend API type. |
+| `api_url` | string | `http://...` | **LLM_API_URL**: Base URL of the LLM backend. |
+| `api_key` | string | `no_key` | **LLM_API_KEY**: API key for authentication. |
+| `api_model` | string | `""` | **LLM_API_MODEL**: Specific model name (e.g., "gpt-4"). |
+| `api_timeout` | double | `120.0` | **LLM_API_TIMEOUT**: Timeout in seconds. |
+| `system_prompt` | string | `""` | **LLM_SYSTEM_PROMPT**: System context. Supports file paths. |
+| `system_prompt_file` | string | `""` | **LLM_SYSTEM_PROMPT_FILE**: Path to system prompt file. |
+| `initial_messages_json` | string | `[]` | **LLM_INITIAL_MESSAGES_JSON**: JSON for few-shot prompting. |
+| `max_history_length` | integer | `10` | **LLM_MAX_HISTORY_LENGTH**: Max conversation turns. |
+| `message_log` | string | `""` | **LLM_MESSAGE_LOG**: Persistent JSON log file path. |
+| `stream` | bool | `true` | **LLM_STREAM**: Enable/disable token streaming. |
+| `process_image_urls` | bool | `false` | **LLM_PROCESS_IMAGE_URLS**: Process images in JSON. |
+| `response_format` | string | `""` | **LLM_RESPONSE_FORMAT**: Output format (Dynamic). |
+| `max_tool_calls` | integer | `5` | **LLM_MAX_TOOL_CALLS**: Max consecutive tool calls. |
+| `temperature` | double | `0.7` | **LLM_TEMPERATURE**: Output randomness (Dynamic). |
+| `top_p` | double | `1.0` | **LLM_TOP_P**: Nucleus sampling (Dynamic). |
+| `max_tokens` | integer | `0` | **LLM_MAX_TOKENS**: Max tokens to generate (Dynamic). |
+| `stop` | string array | `["stop_llm"]` | **LLM_STOP**: Stop sequences (Dynamic). |
+| `presence_penalty` | double | `0.0` | **LLM_PRESENCE_PENALTY**: Penalize new tokens (Dynamic). |
+| `frequency_penalty` | double | `0.0` | **LLM_FREQUENCY_PENALTY**: Penalize frequencies (Dynamic). |
+| `tool_interfaces` | string array | `[...]` | **LLM_TOOL_INTERFACES**: Paths to tool files. |
 
 ### Structured JSON Output
 
