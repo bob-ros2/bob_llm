@@ -750,7 +750,7 @@ class LLMNode(Node):
                     client_params_updated = True
                 except json.JSONDecodeError as e:
                     result.successful = False
-                    result.reason = f"Invalid JSON for response_format: {e}"
+                    result.reason = f'Invalid JSON for response_format: {e}'
                     return result
 
         if system_prompt_updated:
