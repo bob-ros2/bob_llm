@@ -294,7 +294,7 @@ class LLMNode(Node):
                     return f.read().strip()
             except Exception as e:
                 self.get_logger().error(
-                    f'Failed to read system_prompt_file \'{system_prompt_file}\': {e}')
+                    f"Failed to read system_prompt_file '{system_prompt_file}': {e}")
 
         # Priority 2: system_prompt (check if it's a file path)
         if system_prompt and os.path.isfile(system_prompt):
@@ -303,7 +303,7 @@ class LLMNode(Node):
                     return f.read().strip()
             except Exception as e:
                 self.get_logger().error(
-                    f'Failed to read system_prompt as file \'{system_prompt}\': {e}')
+                    f"Failed to read system_prompt as file '{system_prompt}': {e}")
 
         # Priority 3: system_prompt as string
         return system_prompt
@@ -323,7 +323,7 @@ class LLMNode(Node):
                     f'Loaded {len(initial_messages)} initial messages from JSON.')
         except json.JSONDecodeError:
             self.get_logger().error(
-                'Failed to parse \'initial_messages_json\'.')
+                "Failed to parse 'initial_messages_json'.")
 
     def load_llm_client(self):
         """Load and configure the LLM client based on ROS parameters."""
@@ -333,7 +333,7 @@ class LLMNode(Node):
 
         if not api_url:
             self.get_logger().error(
-                'LLM URL not configured. Please set \'api_url\' parameter.')
+                "LLM URL not configured. Please set 'api_url' parameter.")
             return
 
         self.get_logger().info(
@@ -355,7 +355,7 @@ class LLMNode(Node):
                     self.get_logger().info(f'Using response_format: {response_format}')
                 except json.JSONDecodeError as e:
                     self.get_logger().error(
-                        f'Failed to parse \'response_format\' JSON: {e}')
+                        f"Failed to parse 'response_format' JSON: {e}")
 
             self.llm_client = OpenAICompatibleClient(
                 api_url=self.get_parameter('api_url').value,
@@ -406,10 +406,10 @@ class LLMNode(Node):
 
                 # Use the module's register function if it exists, otherwise use the default
                 if hasattr(module, 'register') and callable(getattr(module, 'register')):
-                    self.get_logger().info(f'Using custom \'register\' from {path_str}')
+                    self.get_logger().info(f"Using custom 'register' from {path_str}")
                     tools = module.register(module, self)
                 else:
-                    self.get_logger().info(f'Using default \'register\' for {path_str}')
+                    self.get_logger().info(f"Using default 'register' for {path_str}")
                     tools = default_register(module, self)
 
                 all_tools.extend(tools)
@@ -455,7 +455,7 @@ class LLMNode(Node):
                     log_data = json.load(f)
                 if not isinstance(log_data, list):
                     self.get_logger().warning(
-                        f'Log file \'{log_file_path}\' contained invalid data. Overwriting.')
+                        f"Log file '{log_file_path}' contained invalid data. Overwriting.")
                     log_data = []
 
             if not log_data:
@@ -470,7 +470,7 @@ class LLMNode(Node):
                 json.dump(log_data, f, indent=2)
 
         except (IOError, json.JSONDecodeError) as e:
-            self.get_logger().error(f'Error processing message log file \'{log_file_path}\': {e}')
+            self.get_logger().error(f"Error processing message log file '{log_file_path}': {e}")
 
     def _get_truncated_history(self):
         """Return a copy of chat history with long strings truncated."""
@@ -524,10 +524,10 @@ class LLMNode(Node):
         stop_list = self.get_parameter('stop').value
         if msg.data in stop_list:
             if self._is_generating:
-                self.get_logger().warn(f'Cancellation requested: \'{msg.data}\'')
+                self.get_logger().warn(f"Cancellation requested: '{msg.data}'")
                 self._cancel_requested = True
             else:
-                self.get_logger().info(f'Stop command \'{msg.data}\' received.')
+                self.get_logger().info(f"Stop command '{msg.data}' received.")
             return
 
         # --- Busy Check ---
@@ -649,7 +649,7 @@ class LLMNode(Node):
                         func_to_call = self.tool_functions.get(func_name)
 
                         if not func_to_call:
-                            err = f'Tool \'{func_name}\' not found.'
+                            err = f"Tool '{func_name}' not found."
                             self.get_logger().error(err)
                             self.chat_history.append({
                                 'tool_call_id': tool_call_id, 'role': 'tool',
@@ -658,7 +658,7 @@ class LLMNode(Node):
 
                         try:
                             args = json.loads(tool_call['function']['arguments'])
-                            self.get_logger().info(f'Calling tool \'{func_name}\'')
+                            self.get_logger().info(f"Calling tool '{func_name}'")
                             result = func_to_call(**args)
                             c_str = (result if isinstance(result, str)
                                      else json.dumps(result, ensure_ascii=False))
