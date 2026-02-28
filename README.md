@@ -1,3 +1,6 @@
+[![ROS 2 CI](https://github.com/bob-ros2/bob_llm/actions/workflows/ros_ci.yml/badge.svg)](https://github.com/bob-ros2/bob_llm/actions/workflows/ros_ci.yml)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 # ROS Package [bob_llm](https://github.com/bob-ros2/bob_llm)
 
 The `bob_llm` package provides a ROS 2 node (`llm node`) that acts as a powerful interface to an external Large Language Model (LLM). It operates as a stateful service that maintains a conversation, connects to any OpenAI-compatible API, and features a robust tool execution system.
