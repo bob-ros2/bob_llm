@@ -78,7 +78,10 @@ class LLMNode(Node):
             os.environ.get('LLM_API_URL', 'http://localhost:8000/v1'),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description='The base URL of the LLM backend API. The node appends "/chat/completions" automatically.'
+                description=(
+                    'The base URL of the LLM backend API. '
+                    'The node appends "/chat/completions" automatically.'
+                )
             )
         )
         self.declare_parameter(
@@ -102,7 +105,21 @@ class LLMNode(Node):
             os.environ.get('LLM_SYSTEM_PROMPT', ''),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description='The system prompt to set the LLM context.'
+                description=(
+                    'The system prompt to set the LLM context. '
+                    'If this is a valid file path, the content of the file will be used.'
+                )
+            )
+        )
+        self.declare_parameter(
+            'system_prompt_file',
+            os.environ.get('LLM_SYSTEM_PROMPT_FILE', ''),
+            ParameterDescriptor(
+                type=ParameterType.PARAMETER_STRING,
+                description=(
+                    'Path to a file containing the system prompt. '
+                    'Takes precedence over system_prompt.'
+                )
             )
         )
         self.declare_parameter(
@@ -259,12 +276,41 @@ class LLMNode(Node):
         self.pub_latest_turn = self.create_publisher(
             String, 'llm_latest_turn', DEFAULT_QUEUE_SIZE)
 
+        # Register parameter update callback
+        self.add_on_set_parameters_callback(self.on_params_changed)
+
         self.get_logger().info(
             f'Node is ready. History has {len(self.chat_history)} initial messages.')
 
+    def _load_system_prompt(self):
+        """Load the system prompt from parameter or file."""
+        system_prompt_file = self.get_parameter('system_prompt_file').value
+        system_prompt = self.get_parameter('system_prompt').value
+
+        # Priority 1: system_prompt_file
+        if system_prompt_file and os.path.isfile(system_prompt_file):
+            try:
+                with open(system_prompt_file, 'r', encoding='utf-8') as f:
+                    return f.read().strip()
+            except Exception as e:
+                self.get_logger().error(
+                    f"Failed to read system_prompt_file '{system_prompt_file}': {e}")
+
+        # Priority 2: system_prompt (check if it's a file path)
+        if system_prompt and os.path.isfile(system_prompt):
+            try:
+                with open(system_prompt, 'r', encoding='utf-8') as f:
+                    return f.read().strip()
+            except Exception as e:
+                self.get_logger().error(
+                    f"Failed to read system_prompt as file '{system_prompt}': {e}")
+
+        # Priority 3: system_prompt as string
+        return system_prompt
+
     def _initialize_chat_history(self):
         """Populate the initial chat history from ROS parameters."""
-        system_prompt = self.get_parameter('system_prompt').value
+        system_prompt = self._load_system_prompt()
         if system_prompt:
             self.chat_history.append({'role': 'system', 'content': system_prompt})
             self.get_logger().info('System prompt added.')
@@ -679,6 +725,84 @@ class LLMNode(Node):
         msg = String()
         msg.data = prompt_data
         self.prompt_callback(msg)
+
+    def on_params_changed(self, params):
+        """Handle parameter changes at runtime."""
+        from rcl_interfaces.msg import SetParametersResult
+        result = SetParametersResult(successful=True)
+
+        system_prompt_updated = False
+        client_params_updated = False
+
+        for param in params:
+            if param.name in ['system_prompt', 'system_prompt_file']:
+                system_prompt_updated = True
+            elif param.name in [
+                'temperature', 'top_p', 'max_tokens', 'presence_penalty',
+                'frequency_penalty', 'api_timeout', 'stop', 'api_url',
+                'api_key', 'api_model'
+            ]:
+                client_params_updated = True
+            elif param.name == 'response_format':
+                try:
+                    if param.value:
+                        json.loads(param.value)
+                    client_params_updated = True
+                except json.JSONDecodeError as e:
+                    result.successful = False
+                    result.reason = f"Invalid JSON for response_format: {e}"
+                    return result
+
+        if system_prompt_updated:
+            # We need to update the system prompt in the chat history.
+            # Usually it's the first message.
+            new_prompt = self._load_system_prompt()
+            if self.chat_history and self.chat_history[0]['role'] == 'system':
+                self.chat_history[0]['content'] = new_prompt
+                self.get_logger().info('System prompt updated in chat history.')
+            else:
+                # If no system prompt was present, insert it at the beginning
+                self.chat_history.insert(0, {'role': 'system', 'content': new_prompt})
+                self._prefix_history_len += 1
+                self.get_logger().info('System prompt added to chat history.')
+
+        if client_params_updated and hasattr(self, 'llm_client'):
+            # Update client attributes dynamically.
+            # Note: We might need to refresh headers if api_key changes.
+            for param in params:
+                if param.name == 'temperature':
+                    self.llm_client.temperature = param.value
+                elif param.name == 'top_p':
+                    self.llm_client.top_p = param.value
+                elif param.name == 'max_tokens':
+                    self.llm_client.max_tokens = param.value
+                elif param.name == 'presence_penalty':
+                    self.llm_client.presence_penalty = param.value
+                elif param.name == 'frequency_penalty':
+                    self.llm_client.frequency_penalty = param.value
+                elif param.name == 'api_timeout':
+                    self.llm_client.timeout = param.value
+                elif param.name == 'stop':
+                    self.llm_client.stop = list(param.value)
+                elif param.name == 'api_url':
+                    self.llm_client.api_url = param.value.rstrip('/') + '/chat/completions'
+                elif param.name == 'api_model':
+                    self.llm_client.model = param.value
+                elif param.name == 'api_key':
+                    self.llm_client.api_key = param.value
+                    if param.value:
+                        self.llm_client.headers['Authorization'] = f'Bearer {param.value}'
+                    elif 'Authorization' in self.llm_client.headers:
+                        del self.llm_client.headers['Authorization']
+                elif param.name == 'response_format':
+                    if param.value:
+                        self.llm_client.response_format = json.loads(param.value)
+                    else:
+                        self.llm_client.response_format = None
+
+            self.get_logger().info('LLM client parameters updated.')
+
+        return result
 
 
 def main(args=None):

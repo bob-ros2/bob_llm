@@ -2,10 +2,14 @@
   ros__parameters:
 
     # The system prompt sets the context and instructions for the LLM.
+    # If this is a valid file path, the content of the file will be used.
     system_prompt: "You are a helpful robot assistant. 
       You are concise and you are controlling a system.
       When asked to perform an action, use the available tools.
       Dont present simulated results if you didnt get a tool response. Instead tell that there were no response."
+
+    # Alternatively, specify a path to a file containing the system prompt.
+    # system_prompt_file: "/path/to/your/system_prompt.txt"
     
     # A JSON string to pre-load the conversation with examples (few-shot prompting).
     # This helps guide the LLM's behavior.

@@ -4,6 +4,8 @@ Changelog for package bob_llm
 
 1.0.3 (2026-02-10)
 ------------------
+* Added support for loading system_prompt from files and new system_prompt_file parameter
+* Implemented dynamic parameter reconfiguration for LLM client and system prompt
 * Removed prefix v1 from chat API path
 
 1.0.2 (2026-02-01)
