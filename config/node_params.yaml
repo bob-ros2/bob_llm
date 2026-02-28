@@ -43,3 +43,5 @@
     stop: ['stop_llm']
     presence_penalty: 0.0
     frequency_penalty: 0.0
+    # Optional string to publish on llm_stream when generation is finished.
+    eof: ""

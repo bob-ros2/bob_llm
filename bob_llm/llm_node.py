@@ -242,6 +242,14 @@ class LLMNode(Node):
                 description='JSON string defining the output format.'
             )
         )
+        self.declare_parameter(
+            'eof',
+            os.environ.get('LLM_EOF', ''),
+            ParameterDescriptor(
+                type=ParameterType.PARAMETER_STRING,
+                description='Optional string to publish on llm_stream when generation is finished.'
+            )
+        )
 
         self.chat_history = []
         self.load_llm_client()
@@ -693,6 +701,10 @@ class LLMNode(Node):
                         full_response += chunk
                         self.pub_stream.publish(String(data=chunk))
 
+                eof_str = self.get_parameter('eof').value
+                if eof_str:
+                    self.pub_stream.publish(String(data=eof_str))
+
                 self.pub_response.publish(String(data=full_response))
                 assistant_message = {'role': 'assistant', 'content': full_response}
                 self.chat_history.append(assistant_message)
@@ -740,7 +752,7 @@ class LLMNode(Node):
             elif param.name in [
                 'temperature', 'top_p', 'max_tokens', 'presence_penalty',
                 'frequency_penalty', 'api_timeout', 'stop', 'api_url',
-                'api_key', 'api_model'
+                'api_key', 'api_model', 'eof'
             ]:
                 client_params_updated = True
             elif param.name == 'response_format':

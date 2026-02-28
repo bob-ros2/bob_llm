@@ -141,6 +141,7 @@ All parameters can be set via a YAML file, command-line arguments, or environmen
 | `stop` | string array | `["stop_llm"]` | **LLM_STOP**: Stop sequences (Dynamic). |
 | `presence_penalty` | double | `0.0` | **LLM_PRESENCE_PENALTY**: Penalize new tokens (Dynamic). |
 | `frequency_penalty` | double | `0.0` | **LLM_FREQUENCY_PENALTY**: Penalize frequencies (Dynamic). |
+| `eof` | string | `""` | **LLM_EOF**: Signal end of stream (Dynamic). |
 | `tool_interfaces` | string array | `[...]` | **LLM_TOOL_INTERFACES**: Paths to tool files. |
 
 ### Structured JSON Output
