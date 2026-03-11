@@ -665,11 +665,20 @@ class LLMNode(Node):
                             continue
 
                         try:
-                            args = json.loads(tool_call['function']['arguments'])
-                            self.get_logger().info(f"Calling tool '{func_name}'")
+                            args_raw = tool_call['function']['arguments']
+                            args = json.loads(args_raw)
+                            self.get_logger().info(
+                                f"Calling tool '{func_name}' with args: {args_raw}")
+
                             result = func_to_call(**args)
+
                             c_str = (result if isinstance(result, str)
                                      else json.dumps(result, ensure_ascii=False))
+
+                            # Log result preview for debugging
+                            res_preview = c_str[:500] + "..." if len(c_str) > 500 else c_str
+                            self.get_logger().debug(f"Tool '{func_name}' returned: {res_preview}")
+                            
                             self.chat_history.append({
                                 'tool_call_id': tool_call_id, 'role': 'tool',
                                 'name': func_name, 'content': c_str})

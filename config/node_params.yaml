@@ -32,10 +32,10 @@
     #  - "/path/to/your/custom/tool_file.py"
 
     # LLM backend configuration
-    api_type: "openai_compatible"
-    api_url: "http://localhost:8000/v1"
-    api_key: "no_key"
-    api_model: "gpt-oss"
+    api_type: 'openai_compatible'
+    api_url: 'http://localhost:8000/v1'
+    api_key: 'no_key'
+    api_model: 'gpt-oss'
     stream: true
     temperature: 0.7
     top_p: 1.0
@@ -44,4 +44,4 @@
     presence_penalty: 0.0
     frequency_penalty: 0.0
     # Optional string to publish on llm_stream when generation is finished.
-    eof: ""
+    eof: ''
