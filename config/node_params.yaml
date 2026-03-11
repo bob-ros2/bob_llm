@@ -24,6 +24,9 @@
     # Maximum number of consecutive tool calls before aborting.
     max_tool_calls: 20
 
+    # Controls tool calling behavior ('auto', 'none', 'required', or a specific tool name).
+    tool_choice: 'auto'
+
     # If true, processes image_url in JSON prompts by base64 encoding the image.
     process_image_urls: false
 
