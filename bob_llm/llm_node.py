@@ -676,9 +676,9 @@ class LLMNode(Node):
                                      else json.dumps(result, ensure_ascii=False))
 
                             # Log result preview for debugging
-                            res_preview = c_str[:500] + "..." if len(c_str) > 500 else c_str
+                            res_preview = c_str[:500] + '...' if len(c_str) > 500 else c_str
                             self.get_logger().debug(f"Tool '{func_name}' returned: {res_preview}")
-                            
+
                             self.chat_history.append({
                                 'tool_call_id': tool_call_id, 'role': 'tool',
                                 'name': func_name, 'content': c_str})
