@@ -72,6 +72,7 @@ class OpenAICompatibleClient:
         self,
         history: list,
         tools: list = None,
+        tool_choice: str = 'auto',
         stream: bool = False
     ) -> dict:
         """
@@ -79,6 +80,7 @@ class OpenAICompatibleClient:
 
         :param history: The list of messages in the chat history.
         :param tools: An optional list of tool definitions.
+        :param tool_choice: The choice for tool calling (e.g., 'auto', 'none', 'required').
         :param stream: A boolean indicating whether to enable streaming.
         :return: A dictionary representing the complete JSON payload.
         """
@@ -124,21 +126,29 @@ class OpenAICompatibleClient:
 
         if tools:
             payload['tools'] = tools
+            payload['tool_choice'] = tool_choice
 
         if stream:
             payload['stream'] = True
 
         return payload
 
-    def process_prompt(self, history: list, tools: list = None) -> (bool, dict):
+    def process_prompt(
+        self,
+        history: list,
+        tools: list = None,
+        tool_choice: str = 'auto'
+    ) -> (bool, dict):
         """
         Send a blocking prompt request to the LLM.
 
         :param history: The list of messages in the chat history.
         :param tools: An optional list of tool definitions.
+        :param tool_choice: The choice for tool calling.
         :return: A tuple (success, message_dict).
         """
-        payload = self._build_payload(history, tools=tools, stream=False)
+        payload = self._build_payload(
+            history, tools=tools, tool_choice=tool_choice, stream=False)
 
         try:
             response = requests.post(
@@ -159,15 +169,22 @@ class OpenAICompatibleClient:
                 self.logger.error(error_msg)
             return False, {'role': 'assistant', 'content': error_msg}
 
-    def process_prompt_stream(self, history: list, tools: list = None):
+    def process_prompt_stream(
+        self,
+        history: list,
+        tools: list = None,
+        tool_choice: str = 'auto'
+    ):
         """
         Send a streaming prompt request to the LLM.
 
         :param history: The list of messages in the chat history.
         :param tools: An optional list of tool definitions.
+        :param tool_choice: The choice for tool calling.
         :yield: Chunks of the response string or error messages.
         """
-        payload = self._build_payload(history, tools=tools, stream=True)
+        payload = self._build_payload(
+            history, tools=tools, tool_choice=tool_choice, stream=True)
 
         try:
             response = requests.post(

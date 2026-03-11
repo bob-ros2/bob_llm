@@ -250,6 +250,14 @@ class LLMNode(Node):
                 description='Optional string to publish on llm_stream when generation is finished.'
             )
         )
+        self.declare_parameter(
+            'tool_choice',
+            os.environ.get('LLM_TOOL_CHOICE', 'auto'),
+            ParameterDescriptor(
+                type=ParameterType.PARAMETER_STRING,
+                description="Tool calling behavior ('auto', 'none', 'required', or tool object)."
+            )
+        )
 
         self.chat_history = []
         self.load_llm_client()
@@ -633,9 +641,11 @@ class LLMNode(Node):
                 if self._cancel_requested:
                     return
 
+                tool_choice = self.get_parameter('tool_choice').value
                 success, response_message = self.llm_client.process_prompt(
                     self.chat_history,
-                    self.tools if self.tools else None
+                    self.tools if self.tools else None,
+                    tool_choice=tool_choice
                 )
 
                 if not success:
@@ -702,7 +712,11 @@ class LLMNode(Node):
 
             if stream_enabled:
                 full_response = ''
-                for chunk in self.llm_client.process_prompt_stream(self.chat_history):
+                tool_choice = self.get_parameter('tool_choice').value
+                for chunk in self.llm_client.process_prompt_stream(
+                    self.chat_history,
+                    tool_choice=tool_choice
+                ):
                     if self._cancel_requested:
                         self.pub_response.publish(String(data='[Cancelled]'))
                         return
@@ -719,7 +733,11 @@ class LLMNode(Node):
                 self.chat_history.append(assistant_message)
                 self._publish_latest_turn(prompt_text_for_log, assistant_message)
             else:
-                success, final_message = self.llm_client.process_prompt(self.chat_history)
+                tool_choice = self.get_parameter('tool_choice').value
+                success, final_message = self.llm_client.process_prompt(
+                    self.chat_history,
+                    tool_choice=tool_choice
+                )
                 if self._cancel_requested:
                     return
                 if success and final_message.get('content'):
