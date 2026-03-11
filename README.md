@@ -142,6 +142,7 @@ All parameters can be set via a YAML file, command-line arguments, or environmen
 | `presence_penalty` | double | `0.0` | **LLM_PRESENCE_PENALTY**: Penalize new tokens (Dynamic). |
 | `frequency_penalty` | double | `0.0` | **LLM_FREQUENCY_PENALTY**: Penalize frequencies (Dynamic). |
 | `eof` | string | `""` | **LLM_EOF**: Signal end of stream (Dynamic). |
+| `tool_choice` | string | `"auto"` | **LLM_TOOL_CHOICE**: Tool calling behavior (auto, none, required). |
 | `tool_interfaces` | string array | `[...]` | **LLM_TOOL_INTERFACES**: Paths to tool files. |
 
 ### Structured JSON Output
