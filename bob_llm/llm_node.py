@@ -582,45 +582,51 @@ class LLMNode(Node):
                                 prompt_text_for_log = c
                             break
                 elif isinstance(json_data, dict):
-                    user_content = json_data
-                    if json_data.get('role') == 'user':
-                        c = json_data.get('content', '')
-                        if isinstance(c, str):
-                            prompt_text_for_log = c
+                    if 'role' in json_data:
+                        user_content = json_data
+                    else:
+                        # If its a dict without a role, its a structured content,
+                        # wrap it as a user message.
+                        user_content = {'role': 'user', 'content': msg.data}
 
-                        process_img = self.get_parameter('process_image_urls').value
-                        if process_img and 'image_url' in json_data:
-                            image_url = json_data['image_url']
-                            try:
-                                image_data = None
-                                if image_url.startswith('file://'):
-                                    file_path = image_url[7:]
-                                    with open(file_path, 'rb') as image_file:
-                                        mime_type, _ = mimetypes.guess_type(file_path)
-                                        if not mime_type:
-                                            mime_type = 'image/jpeg'
-                                        b64 = base64.b64encode(
-                                            image_file.read()).decode('utf-8')
-                                        image_data = f'data:{mime_type};base64,{b64}'
-                                elif image_url.startswith('http'):
-                                    response = requests.get(image_url, timeout=10.0)
-                                    response.raise_for_status()
-                                    m_t = response.headers.get(
-                                        'Content-Type', 'image/jpeg')
+                    # Extract log text
+                    c = user_content.get('content', '')
+                    if isinstance(c, str):
+                        prompt_text_for_log = c
+
+                    process_img = self.get_parameter('process_image_urls').value
+                    if process_img and 'image_url' in json_data:
+                        image_url = json_data['image_url']
+                        try:
+                            image_data = None
+                            if image_url.startswith('file://'):
+                                file_path = image_url[7:]
+                                with open(file_path, 'rb') as image_file:
+                                    mime_type, _ = mimetypes.guess_type(file_path)
+                                    if not mime_type:
+                                        mime_type = 'image/jpeg'
                                     b64 = base64.b64encode(
-                                        response.content).decode('utf-8')
-                                    image_data = f'data:{m_t};base64,{b64}'
+                                        image_file.read()).decode('utf-8')
+                                    image_data = f'data:{mime_type};base64,{b64}'
+                            elif image_url.startswith('http'):
+                                response = requests.get(image_url, timeout=10.0)
+                                response.raise_for_status()
+                                m_t = response.headers.get(
+                                    'Content-Type', 'image/jpeg')
+                                b64 = base64.b64encode(
+                                    response.content).decode('utf-8')
+                                image_data = f'data:{m_t};base64,{b64}'
 
-                                if image_data:
-                                    user_content = {
-                                        'role': 'user',
-                                        'content': [
-                                            {'type': 'text', 'text': json_data.get('content', '')},
-                                            {'type': 'image_url', 'image_url': {'url': image_data}}
-                                        ]
-                                    }
-                            except Exception as e:
-                                self.get_logger().error(f'Image processing failed: {e}')
+                            if image_data:
+                                user_content = {
+                                    'role': 'user',
+                                    'content': [
+                                        {'type': 'text', 'text': json_data.get('content', '')},
+                                        {'type': 'image_url', 'image_url': {'url': image_data}}
+                                    ]
+                                }
+                        except Exception as e:
+                            self.get_logger().error(f'Image processing failed: {e}')
 
                     new_messages = [user_content]
                 else:

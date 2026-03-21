@@ -4,6 +4,7 @@ Changelog for package bob_llm
 
 1.0.3 (2026-02-10)
 ------------------
+* Fixed prompt input to handle JSON dictionaries without a role by wrapping them as user messages and improved log extraction
 * Added support for loading system_prompt from files and new system_prompt_file parameter
 * Implemented dynamic parameter reconfiguration for LLM client and system prompt
 * Added optional `eof` parameter to signal the end of a stream on `llm_stream`
