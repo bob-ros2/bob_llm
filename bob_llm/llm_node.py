@@ -56,13 +56,6 @@ class LLMNode(Node):
 
         self.get_logger().info('LLM Node starting up...')
 
-        # Get the string list from environment or use description
-        share_dir = get_package_share_directory('bob_llm')
-        interfaces_array = os.environ.get(
-            'LLM_TOOL_INTERFACES',
-            os.path.join(share_dir, 'config', 'example_interface.py'))
-        interfaces_array = interfaces_array.split(',')
-
         # ROS parameters
 
         self.declare_parameter(
@@ -212,7 +205,7 @@ class LLMNode(Node):
         )
         self.declare_parameter(
             'tool_interfaces',
-            interfaces_array,
+            [],
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING_ARRAY,
                 description='A list of Python modules or file paths to load as tools.'
@@ -256,6 +249,17 @@ class LLMNode(Node):
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
                 description="Tool calling behavior ('auto', 'none', 'required', or tool object)."
+            )
+        )
+        share_dir = get_package_share_directory('bob_llm')
+        default_skill_dir = os.path.join(share_dir, 'config', 'skills')
+
+        self.declare_parameter(
+            'skill_dir',
+            os.environ.get('LLM_SKILL_DIR', default_skill_dir),
+            ParameterDescriptor(
+                type=ParameterType.PARAMETER_STRING,
+                description='Directory where skills are stored.'
             )
         )
 

@@ -143,7 +143,8 @@ All parameters can be set via a YAML file, command-line arguments, or environmen
 | `frequency_penalty` | double | `0.0` | **LLM_FREQUENCY_PENALTY**: Penalize frequencies (Dynamic). |
 | `eof` | string | `""` | **LLM_EOF**: Signal end of stream (Dynamic). |
 | `tool_choice` | string | `"auto"` | **LLM_TOOL_CHOICE**: Tool calling behavior (auto, none, required). |
-| `tool_interfaces` | string array | `[...]` | **LLM_TOOL_INTERFACES**: Paths to tool files. |
+| `tool_interfaces` | string array | `[]` | **LLM_TOOL_INTERFACES**: Paths to tool files. |
+| `skill_dir` | string | `./config/skills` | **LLM_SKILL_DIR**: Directory where skills are stored. |
 
 ### Structured JSON Output
 
@@ -238,52 +239,36 @@ The standout feature of this node is its ability to use dynamically loaded Pytho
 
 A tool file is a standard Python script containing one or more functions. The system automatically generates the necessary API schema for the LLM from your function's signature (including type hints) and its docstring. The first line of the docstring is used as the function's description for the LLM.
 
-**Example: `config/example_interface.py`**
-```python
-def get_weather(location: str, unit: str = "celsius") -> str:
-    """
-    Get the current weather in a given location.
+### Skill System (Agentskills)
 
-    This is an example function and will return a fixed string.
-    """
-    if "tokyo" in location.lower():
-        return f"The weather in Tokyo is 10 degrees {unit} and sunny."
-    elif "san francisco" in location.lower():
-        return f"The weather in San Francisco is 15 degrees {unit} and foggy."
-    else:
-        return f"Sorry, I don't have the weather for {location}."
+The `bob_llm` node implements the [Anthropic Agent Skills](https://agentskills.io/specification) specification. This allows the LLM to manage its own capabilities using a standardized folder structure.
 
-def get_robot_status() -> str:
-    """
-    Retrieves the current status of the robot.
+#### 1. Skill Tools (`config/skill_tools.py`)
 
-    This function checks the robot's battery level, joint states, and current task.
-    """
-    # In a real scenario, this would query robot topics or services
-    return "Robot status: Battery is at 85%. All systems are nominal. Currently idle."
-```
+This module provides the core interface for the LLM to interact with its skills directory. It enables the LLM to:
+- **Discover**: List available skills in the `skill_dir`.
+- **Learn**: Read `SKILL.md` files to understand how to use a specific skill.
+- **Create/Modify**: Write new skill files or update existing ones (logic, scripts).
+- **Download**: Pull new skills from remote repositories (ZIP format).
+- **Execute**: Run scripts bundled within a skill.
 
-### Configuring Tools
+#### 2. Skill Structure
 
-To make your tools available to the LLM, you must provide a list of absolute paths to your Python tool files in the `tool_interfaces` parameter.
+Each skill is a directory within `skill_dir` containing:
+- `SKILL.md`: Documentation for the LLM.
+- `scripts/`: Implementation scripts (Python, Bash).
+- `assets/`: Optional resources.
 
-Open `config/node_params.yaml` and edit the `tool_interfaces` list. You must replace any placeholder path with the full, absolute path to the tool file on your system.
+#### 3. Configuration
 
-For example:
+To enable the skill system, add the absolute path of `config/skill_tools.py` to your `tool_interfaces` and set the `skill_dir`:
+
 ```yaml
-# In config/node_params.yaml
 llm:
   ros__parameters:
-    # ... other parameters
-
-    # A list of Python modules to load as tool interfaces.
-    # Replace the path below with the absolute path on your machine.
     tool_interfaces:
-      - "/home/user/ros2_ws/src/bob_llm/config/example_interface.py"
-      # You can add more tool files here
-      # - "/home/user/ros2_ws/src/my_robot_tools/my_robot_tools/tools.py"
-
-    # ... other parameters
+      - "/path/to/bob_llm/config/skill_tools.py"
+    skill_dir: "./config/skills"
 ```
 
 ### Inbuilt Tools
@@ -294,36 +279,16 @@ The package comes with several ready-to-use tool modules in the `config/` direct
 
 This module provides a comprehensive set of tools that wrap standard ROS 2 command-line interface (CLI) functionalities. It allows the LLM to inspect the system (list nodes, topics, services) and interact with it (publish messages, call services, get/set parameters).
 
-**Dependencies:**
--   None (uses standard ROS 2 libraries and CLI tools).
-
 **Usage:**
 Add the absolute path to `config/ros_cli_tools.py` to your `tool_interfaces` parameter.
 
 #### 2. Qdrant Memory Tools (`config/qdrant_tools.py`)
 
-This module enables long-term memory for the LLM using the Qdrant vector database. It uses the Model Context Protocol (MCP) to communicate with a Qdrant MCP server.
+This module enables long-term memory for the LLM using the Qdrant vector database.
 
 **Features:**
 -   `save_memory`: Stores information with optional metadata.
 -   `search_memory`: Semantically searches for relevant information in the database.
-
-**Prerequisites:**
-1.  **Qdrant Server:** You must have a running Qdrant server instance. See [Qdrant Quickstart](https://qdrant.tech/) for installation instructions.
-2.  **MCP Python Package:** Install the `mcp` library:
-    ```bash
-    pip install mcp
-    ```
-3.  **Qdrant MCP Server:** Install the Qdrant MCP server (see [mcp-server-qdrant](https://github.com/qdrant/mcp-server-qdrant)). Ensure `mcp-server-qdrant` is in your PATH.
-
-**Environment Variables:**
-The `qdrant_tools.py` module requires the following environment variables to connect to your Qdrant instance:
-
-```bash
-export QDRANT_URL="http://localhost:6333"
-export QDRANT_API_KEY="your_key"
-export COLLECTION_NAME="my_knowledge_base"
-```
 
 **Usage:**
 Add the absolute path to `config/qdrant_tools.py` to your `tool_interfaces` parameter.

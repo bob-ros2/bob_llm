@@ -11,6 +11,8 @@ Changelog for package bob_llm
 * Added `tool_choice` parameter to dynamically control tool calling behavior
 * Enhanced tool execution logging with result previews for better debugging
 * Removed prefix v1 from chat API path
+* Added support for [Agentskills](https://agentskills.io/) specification
+* Removed example tool interfaces in favor of the new modular skill system-based approach
 
 1.0.2 (2026-02-01)
 ------------------
