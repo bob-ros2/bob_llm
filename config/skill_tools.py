@@ -15,10 +15,10 @@
 """A tool interface for the LLM node providing Skill functionalities."""
 
 import os
+import shlex
 import subprocess
 import urllib.request
 import zipfile
-import shlex
 from typing import Any, List
 
 from bob_llm.tool_utils import register as default_register
@@ -53,7 +53,7 @@ def _get_skill_dir() -> str:
                 return param.value
         except rclpy.exceptions.ParameterNotDeclaredException:
             pass
-    return "./config/skills"
+    return './config/skills'
 
 
 # --- Tool Definitions ---
@@ -62,35 +62,35 @@ def list_skills() -> str:
     """List all available skills in the skill directory."""
     skill_dir = _get_skill_dir()
     if not os.path.exists(skill_dir):
-        return f"Skill directory {skill_dir} does not exist."
+        return f'Skill directory {skill_dir} does not exist.'
     try:
         skills = []
         for d in os.listdir(skill_dir):
             if os.path.isdir(os.path.join(skill_dir, d)):
                 skills.append(d)
         if not skills:
-            return "No skills found."
-        return f"Available skills: {', '.join(skills)}"
+            return 'No skills found.'
+        return f'Available skills: {", ".join(skills)}'
     except Exception as e:
-        return f"Error listing skills: {e}"
+        return f'Error listing skills: {e}'
 
 
 def read_skill_file(skill_name: str, filename: str) -> str:
-    """
+    r"""
     Read a file from a specific skill. Useful for reading SKILL.md or scripts.
 
     :param skill_name: The name of the skill.
-    :param filename: The name of the file to read (e.g. 'SKILL.md').
+    :param filename: The name of the file to read (e.g. \'SKILL.md\').
     """
     skill_dir = _get_skill_dir()
     path = os.path.join(skill_dir, skill_name, filename)
     if not os.path.exists(path):
-        return f"Error: File {filename} not found in skill {skill_name}."
+        return f'Error: File {filename} not found in skill {skill_name}.'
     try:
         with open(path, 'r', encoding='utf-8') as f:
             return f.read()
     except Exception as e:
-        return f"Error reading file: {e}"
+        return f'Error reading file: {e}'
 
 
 def write_skill_file(skill_name: str, filename: str, content: str) -> str:
@@ -108,8 +108,8 @@ def write_skill_file(skill_name: str, filename: str, content: str) -> str:
 
     # Check for write permissions in the base directory
     if os.path.exists(skill_dir) and not os.access(skill_dir, os.W_OK):
-        return (f"Error: Directory '{skill_dir}' is READ-ONLY. "
-                "To enable writing skills, either change permissions or "
+        return (f'Error: Directory \'{skill_dir}\' is READ-ONLY. '
+                'To enable writing skills, either change permissions or '
                 "set the 'skill_dir' parameter to a writable path.")
 
     try:
@@ -125,9 +125,9 @@ def write_skill_file(skill_name: str, filename: str, content: str) -> str:
         if filename.endswith('.sh') or filename.endswith('.py') or filename.startswith('scripts/'):
             os.chmod(file_path, 0o755)
 
-        return f"Successfully wrote {filename} in skill {skill_name}."
+        return f'Successfully wrote {filename} in skill {skill_name}.'
     except Exception as e:
-        return f"Error writing file: {e}"
+        return f'Error writing file: {e}'
 
 
 def download_skill(url: str, skill_name: str) -> str:
@@ -142,34 +142,34 @@ def download_skill(url: str, skill_name: str) -> str:
 
     # Check for write permissions
     if os.path.exists(skill_dir) and not os.access(skill_dir, os.W_OK):
-        return (f"Error: Directory '{skill_dir}' is READ-ONLY. "
-                "To enable downloading skills, change permissions or "
+        return (f'Error: Directory \'{skill_dir}\' is READ-ONLY. '
+                'To enable downloading skills, change permissions or '
                 "set 'skill_dir' to a writable path.")
 
     try:
         os.makedirs(path, exist_ok=True)
-        zip_path = os.path.join(path, "downloaded.zip")
+        zip_path = os.path.join(path, 'downloaded.zip')
         urllib.request.urlretrieve(url, zip_path)
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(path)
         os.remove(zip_path)
-        return f"Successfully downloaded and extracted skill {skill_name}."
+        return f'Successfully downloaded and extracted skill {skill_name}.'
     except Exception as e:
-        return f"Error downloading skill: {e}"
+        return f'Error downloading skill: {e}'
 
 
-def execute_skill_script(skill_name: str, script_path: str, args: str = "") -> str:
-    """
+def execute_skill_script(skill_name: str, script_path: str, args: str = '') -> str:
+    r"""
     Execute a script belonging to a skill.
 
     :param skill_name: The name of the skill.
-    :param script_path: The relative path to the script within the skill (e.g. 'scripts/run.sh').
+    :param script_path: The relative path to the script within the skill (e.g. \'scripts/run.sh\').
     :param args: Optional arguments to pass to the script as a single string.
     """
     skill_dir = _get_skill_dir()
     full_path = os.path.join(skill_dir, skill_name, script_path)
     if not os.path.exists(full_path):
-        return f"Error: Script {script_path} not found in skill {skill_name}."
+        return f'Error: Script {script_path} not found in skill {skill_name}.'
 
     try:
         cmd = [full_path]
@@ -186,12 +186,12 @@ def execute_skill_script(skill_name: str, script_path: str, args: str = "") -> s
 
         output = result.stdout.strip()
         if result.returncode != 0:
-            output += f"\nError (Code {result.returncode}): {result.stderr.strip()}"
+            output += f'\nError (Code {result.returncode}): {result.stderr.strip()}'
         return output
     except Exception as e:
-        return f"Error executing script: {e}"
+        return f'Error executing script: {e}'
 
 
 def apply_skill(skill_name: str) -> str:
     """Apply an existing skill by retrieving its SKILL.md definition."""
-    return read_skill_file(skill_name, "SKILL.md")
+    return read_skill_file(skill_name, 'SKILL.md')
