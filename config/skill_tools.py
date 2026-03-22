@@ -14,11 +14,11 @@
 
 """A tool interface for the LLM node providing Skill functionalities."""
 
+from typing import Any, List
 import os
 import shlex
 import subprocess
 import urllib.request
-from typing import Any, List
 import zipfile
 
 from bob_llm.tool_utils import register as default_register
@@ -109,7 +109,7 @@ def write_skill_file(skill_name: str, filename: str, content: str) -> str:
     # Check for write permissions in the base directory
     if os.path.exists(skill_dir) and not os.access(skill_dir, os.W_OK):
         return (f"Error: Directory '{skill_dir}' is READ-ONLY. "
-                "To enable writing skills, either change permissions or "
+                'To enable writing skills, either change permissions or '
                 "set the 'skill_dir' parameter to a writable path.")
 
     try:
@@ -143,7 +143,7 @@ def download_skill(url: str, skill_name: str) -> str:
     # Check for write permissions
     if os.path.exists(skill_dir) and not os.access(skill_dir, os.W_OK):
         return (f"Error: Directory '{skill_dir}' is READ-ONLY. "
-                "To enable downloading skills, change permissions or "
+                'To enable downloading skills, change permissions or '
                 "set 'skill_dir' to a writable path.")
 
     try:
