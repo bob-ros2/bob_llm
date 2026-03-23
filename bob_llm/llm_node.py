@@ -25,6 +25,8 @@ import mimetypes
 import os
 
 from ament_index_python.packages import get_package_share_directory
+from bob_llm.backend_clients import OpenAICompatibleClient
+from bob_llm.tool_utils import register as default_register
 from rcl_interfaces.msg import ParameterDescriptor
 from rcl_interfaces.msg import ParameterType
 from rcl_interfaces.msg import SetParametersResult
@@ -34,10 +36,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.logging import LoggingSeverity
 from rclpy.node import Node
 import requests
-from bob_llm.backend_clients import OpenAICompatibleClient
 from std_msgs.msg import String
-
-from bob_llm.tool_utils import register as default_register
 
 
 class LLMNode(Node):
