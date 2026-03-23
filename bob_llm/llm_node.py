@@ -263,6 +263,13 @@ class LLMNode(Node):
             )
         )
 
+        # Cloak API Key: Read from parameter, store in private variable, and clear parameter.
+        self._api_key = self.get_parameter('api_key').value
+        if self._api_key and self._api_key != 'no_key':
+            new_param = rclpy.parameter.Parameter('api_key', rclpy.Parameter.Type.STRING, '')
+            self.set_parameters([new_param])
+            self.get_logger().info('API key has been cloaked.')
+
         self.chat_history = []
         self.load_llm_client()
         self._initialize_chat_history()
@@ -379,7 +386,7 @@ class LLMNode(Node):
 
             self.llm_client = OpenAICompatibleClient(
                 api_url=self.get_parameter('api_url').value,
-                api_key=self.get_parameter('api_key').value,
+                api_key=self._api_key,
                 model=self.get_parameter('api_model').value,
                 logger=self.get_logger(),
                 temperature=self.get_parameter('temperature').value,
