@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ROS 2 node for Large Language Models."""
-
-import asyncio
 import base64
 from collections import deque
 import importlib
@@ -29,7 +26,6 @@ from bob_llm.backend_clients import OpenAICompatibleClient
 from bob_llm.tool_utils import register as default_register
 from rcl_interfaces.msg import ParameterDescriptor
 from rcl_interfaces.msg import ParameterType
-from rcl_interfaces.msg import SetParametersResult
 import rclpy
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -47,9 +43,9 @@ class LLMNode(Node):
     """
 
     def __init__(self):
-        super().__init__('llm_node')
+        super().__init__('llm')
 
-        # Configure logging
+        # Synchronize logging level with ROS logger verbosity for library output.
         logging.basicConfig(
             level=(logging.DEBUG
                    if self.get_logger().get_effective_level()
@@ -453,174 +449,167 @@ class LLMNode(Node):
                     if hasattr(module, func_name):
                         all_functions[func_name] = getattr(module, func_name)
 
+            except ImportError as e:
+                self.get_logger().error(f'Failed to import tool module {path_str}: {e}')
             except Exception as e:
                 self.get_logger().error(
-                    f"Failed to load tool interface '{path_str}': {e}")
+                    f'Error loading tools from {path_str}: {e}')
 
         return all_tools, all_functions
 
-    def on_params_changed(self, params):
-        """Handle dynamic parameter updates."""
-        reconfigured = False
-        reinit_llm = False
-        for param in params:
-            if param.name in (
-                'api_url', 'api_model', 'temperature', 'top_p', 'max_tokens',
-                'stop', 'presence_penalty', 'frequency_penalty', 'api_timeout'
-            ):
-                reinit_llm = True
-            if param.name == 'system_prompt':
-                self.get_logger().info('System prompt update requested.')
-                new_all_history = []
-                new_all_history.append({'role': 'system', 'content': self._load_system_prompt()})
-                # Attempt to keep user/assistant history but replace the system message
-                # This is simple; we only replace the very first message if it's system.
-                if self.chat_history and self.chat_history[0]['role'] == 'system':
-                    self.chat_history[0]['content'] = param.value
-                else:
-                    # Prepend if no system prompt was there
-                    self.chat_history.insert(0, {'role': 'system', 'content': param.value})
-                reconfigured = True
+    def _publish_latest_turn(self, user_prompt: str, assistant_message: dict):
+        """
+        Process the latest conversational turn for publishing and logging.
 
-        if reinit_llm:
-            self.load_llm_client()
-            reconfigured = True
+        :param user_prompt: The string content of the user's latest prompt.
+        :param assistant_message: The final message dictionary from the assistant.
+        """
+        try:
+            user_msg = {'role': 'user', 'content': user_prompt}
+            latest_turn_list = [user_msg, assistant_message]
+            json_string = json.dumps(latest_turn_list)
+            self.pub_latest_turn.publish(String(data=json_string))
+        except TypeError as e:
+            self.get_logger().error(f'Failed to serialize latest turn to JSON: {e}')
 
-        return SetParametersResult(successful=reconfigured)
-
-    async def get_llm_response(self, messages, tools=None, tool_choice='auto'):
-        """Send a request to the LLM backend and return the response."""
-        if not self.llm_client:
-            self.get_logger().error('LLM client not loaded.')
-            return None
-
-        return await self.llm_client.generate_response(
-            messages=messages,
-            tools=tools,
-            tool_choice=tool_choice,
-            stream=self.get_parameter('stream').value
-        )
-
-    def _append_to_log(self, role, content):
-        """Append a message to the JSON log file if configured."""
-        log_file = self.get_parameter('message_log').value
-        if not log_file:
+        # --- Log to file ---
+        log_file_path = self.get_parameter('message_log').value
+        if not log_file_path:
             return
 
         try:
             log_data = []
-            if os.path.exists(log_file):
-                with open(log_file, 'r', encoding='utf-8') as f:
-                    try:
-                        log_data = json.load(f)
-                    except json.JSONDecodeError:
-                        pass
+            if os.path.exists(log_file_path) and os.path.getsize(log_file_path) > 0:
+                with open(log_file_path, 'r', encoding='utf-8') as f:
+                    log_data = json.load(f)
+                if not isinstance(log_data, list):
+                    self.get_logger().warning(
+                        f"Log file '{log_file_path}' contained invalid data. Overwriting.")
+                    log_data = []
 
-            log_data.append({
-                'timestamp': self.get_clock().now().to_msg().sec,
-                'role': role,
-                'content': content
-            })
+            if not log_data:
+                system_prompt = self.get_parameter('system_prompt').value
+                if system_prompt:
+                    log_data.append({'role': 'system', 'content': system_prompt})
 
-            with open(log_file, 'w', encoding='utf-8') as f:
+            log_data.append({'role': 'user', 'content': user_prompt})
+            log_data.append(assistant_message)
+
+            with open(log_file_path, 'w', encoding='utf-8') as f:
                 json.dump(log_data, f, indent=2)
-        except Exception as e:
-            self.get_logger().error(f'Failed to write to message log: {e}')
 
-    async def _process_tool_calls(self, response_msg):
-        """Handle tool calls from the LLM response."""
-        if not response_msg.tool_calls:
-            return None
+        except (IOError, json.JSONDecodeError) as e:
+            self.get_logger().error(f"Error processing message log file '{log_file_path}': {e}")
 
-        # Add the assistant's request for tool calls to history
-        self.chat_history.append(response_msg.to_dict())
+    def _get_truncated_history(self):
+        """Return a copy of chat history with long strings truncated."""
+        truncated_history = []
+        for msg in self.chat_history:
+            msg_copy = msg.copy()
+            if isinstance(msg_copy.get('content'), list):
+                new_content = []
+                for part in msg_copy['content']:
+                    if isinstance(part, dict) and part.get('type') == 'image_url':
+                        part_copy = part.copy()
+                        if 'image_url' in part_copy and 'url' in part_copy['image_url']:
+                            url = part_copy['image_url']['url']
+                            if len(url) > 100:
+                                part_copy['image_url'] = {
+                                    'url': f'{url[:30]}...<truncated>...{url[-30:]}'
+                                }
+                        new_content.append(part_copy)
+                    else:
+                        new_content.append(part)
+                msg_copy['content'] = new_content
+            truncated_history.append(msg_copy)
+        return truncated_history
 
-        for tool_call in response_msg.tool_calls:
-            func_name = tool_call.function_name
-            arguments = tool_call.arguments
-            call_id = tool_call.id
+    def _trim_chat_history(self):
+        """
+        Prevent the chat history from growing indefinitely.
 
-            self.get_logger().info(f"Calling tool '{func_name}' with args: {arguments}")
+        It trims the oldest conversational turns to stay within the limit.
+        """
+        max_len = self.get_parameter('max_history_length').value
+        prefix = self.chat_history[:self._prefix_history_len]
+        conversation = self.chat_history[self._prefix_history_len:]
+        user_message_indices = [
+            i for i, msg in enumerate(conversation) if msg['role'] == 'user']
+        num_turns = len(user_message_indices)
 
-            if func_name in self.tool_functions:
-                try:
-                    # Execute the function
-                    result = self.tool_functions[func_name](**arguments)
+        if num_turns > max_len:
+            first_turn_to_keep_idx = user_message_indices[num_turns - max_len]
+            trimmed_conversation = conversation[first_turn_to_keep_idx:]
+            self.chat_history = prefix + trimmed_conversation
+            self.get_logger().info(
+                f'Trimmed {num_turns - max_len} old turn(s) from chat history.')
 
-                    # Convert result to string if it isn't
-                    if not isinstance(result, str):
-                        result = json.dumps(result)
+        self.get_logger().debug(
+            f'History: {str(self._get_truncated_history())}')
 
-                    # Log a snippet of the result
-                    preview = result[:100] + '...' if len(result) > 100 else result
-                    self.get_logger().info(f"Tool '{func_name}' returned: {preview}")
-
-                    # Add tool response to history
-                    self.chat_history.append({
-                        'role': 'tool',
-                        'tool_call_id': call_id,
-                        'name': func_name,
-                        'content': result
-                    })
-                except Exception as e:
-                    error_msg = f"Error executing tool '{func_name}': {e}"
-                    self.get_logger().error(error_msg)
-                    self.chat_history.append({
-                        'role': 'tool',
-                        'tool_call_id': call_id,
-                        'name': func_name,
-                        'content': error_msg
-                    })
+    def prompt_callback(self, msg):
+        """Process an incoming prompt from the 'llm_prompt' topic."""
+        # --- Cancellation Check ---
+        stop_list = self.get_parameter('stop').value
+        if msg.data in stop_list:
+            if self._is_generating:
+                self.get_logger().warn(f"Cancellation requested: '{msg.data}'")
+                self._cancel_requested = True
             else:
-                error_msg = f"Tool '{func_name}' not found."
-                self.get_logger().error(error_msg)
-                self.chat_history.append({
-                    'role': 'tool',
-                    'tool_call_id': call_id,
-                    'name': func_name,
-                    'content': error_msg
-                })
+                self.get_logger().info(f"Stop command '{msg.data}' received.")
+            return
 
-        # Return history to continue generation
-        return self.chat_history
-
-    def _publish_stream(self, text, is_final=False):
-        """Publish a chunk of text to the llm_stream topic."""
-        msg = String()
-        msg.data = text
-        self.pub_stream.publish(msg)
-
-        if is_final:
-            eof_str = self.get_parameter('eof').value
-            if eof_str:
-                eof_msg = String()
-                eof_msg.data = eof_str
-                self.pub_stream.publish(eof_msg)
-
-    async def _handle_prompt(self, prompt_text):
-        """Orchestrate the flow from prompt to final response, including tool calls."""
+        # --- Busy Check ---
         if self._is_generating:
-            self._prompt_queue.append(prompt_text)
-            self.get_logger().info('Node is busy. Prompt queued.')
+            self._prompt_queue.append(msg.data)
+            self.get_logger().info(
+                f'Queued prompt. Queue size: {len(self._prompt_queue)}')
+            if self._queue_timer is None:
+                self._queue_timer = self.create_timer(
+                    self._queue_timer_period,
+                    self._process_queue_callback,
+                    callback_group=ReentrantCallbackGroup()
+                )
             return
 
         self._is_generating = True
         self._cancel_requested = False
 
         try:
-            # Handle JSON prompts (for image support or specific roles)
+            if not self.llm_client:
+                self.get_logger().error('LLM client not available.')
+                return
+
+            self.get_logger().info('Prompt received')
+            prompt_text_for_log = msg.data
+            new_messages = []
+
             try:
-                json_prompt = json.loads(prompt_text)
-                if isinstance(json_prompt, dict):
-                    if 'role' not in json_prompt:
-                        # Wrap as user message if role is missing
-                        user_msg = {'role': 'user', 'content': prompt_text}
+                json_data = json.loads(msg.data)
+                if isinstance(json_data, list):
+                    new_messages = json_data
+                    for m in reversed(new_messages):
+                        if isinstance(m, dict) and m.get('role') == 'user':
+                            c = m.get('content', '')
+                            if isinstance(c, str):
+                                prompt_text_for_log = c
+                            break
+                elif isinstance(json_data, dict):
+                    if 'role' in json_data:
+                        user_content = json_data
                     else:
-                        user_msg = json_prompt
+                        # If its a dict without a role, its a structured content,
+                        # wrap it as a user message.
+                        user_content = {'role': 'user', 'content': msg.data}
+
+                    # Extract log text
+                    c = user_content.get('content', '')
+                    if isinstance(c, str):
+                        prompt_text_for_log = c
 
                     process_img = self.get_parameter('process_image_urls').value
-                    if process_img and 'image_url' in json_prompt:
-                        image_url = json_prompt['image_url']
+                    if process_img and 'image_url' in json_data:
+                        image_url = json_data['image_url']
                         try:
                             image_data = None
                             if image_url.startswith('file://'):
@@ -642,145 +631,249 @@ class LLMNode(Node):
                                 image_data = f'data:{m_t};base64,{b64}'
 
                             if image_data:
-                                user_msg = {
+                                user_content = {
                                     'role': 'user',
                                     'content': [
-                                        {'type': 'text', 'text': json_prompt.get('content', '')},
+                                        {'type': 'text', 'text': json_data.get('content', '')},
                                         {'type': 'image_url', 'image_url': {'url': image_data}}
                                     ]
                                 }
                         except Exception as e:
                             self.get_logger().error(f'Image processing failed: {e}')
 
+                    new_messages = [user_content]
                 else:
-                    user_msg = {'role': 'user', 'content': prompt_text}
+                    new_messages = [{'role': 'user', 'content': str(json_data)}]
+                    prompt_text_for_log = str(json_data)
             except json.JSONDecodeError:
-                user_msg = {'role': 'user', 'content': prompt_text}
+                new_messages = [{'role': 'user', 'content': msg.data}]
+                prompt_text_for_log = msg.data
 
-            # Add user prompt to history
-            self.chat_history.append(user_msg)
-            self._append_to_log('user', prompt_text)
+            self.chat_history.extend(new_messages)
+            self._trim_chat_history()
 
-            # Trim history to max_history_length (keep system prompt)
-            max_len = self.get_parameter('max_history_length').value
-            if len(self.chat_history) > max_len:
-                # Always keep the system prompt at index 0 and initial few-shot messages
-                # We only trim messages added during the current session
-                session_history = self.chat_history[self._prefix_history_len:]
-                if len(session_history) > (max_len - self._prefix_history_len):
-                    trimmed_session = session_history[
-                        -(max_len - self._prefix_history_len):
-                    ]
-                    self.chat_history = (
-                        self.chat_history[:self._prefix_history_len] +
-                        trimmed_session
-                    )
-
-            tool_call_count = 0
+            stream_enabled = self.get_parameter('stream').value
             max_calls = self.get_parameter('max_tool_calls').value
+            tool_call_count = 0
 
-            while tool_call_count < max_calls and not self._cancel_requested:
-                # Request response from LLM
-                response = await self.get_llm_response(
-                    messages=self.chat_history,
-                    tools=self.tools if self.tools else None,
-                    tool_choice=self.get_parameter('tool_choice').value
+            while tool_call_count < max_calls:
+                if self._cancel_requested:
+                    return
+
+                tool_choice = self.get_parameter('tool_choice').value
+                success, response_message = self.llm_client.process_prompt(
+                    self.chat_history,
+                    self.tools if self.tools else None,
+                    tool_choice=tool_choice
                 )
 
-                if response is None:
-                    break
+                if not success:
+                    self.get_logger().error(f'LLM request error: {response_message}')
+                    self.chat_history.pop()
+                    return
 
-                if response.is_streaming:
-                    full_text = ''
-                    async for chunk in response.stream_content:
+                if response_message.get('tool_calls'):
+                    if response_message.get('content') is None:
+                        response_message['content'] = ''
+                    self.chat_history.append(response_message)
+                    tool_call_count += 1
+                    for tool_call in response_message['tool_calls']:
                         if self._cancel_requested:
-                            break
-                        full_text += chunk
-                        self._publish_stream(chunk)
+                            return
 
-                    self._publish_stream('', is_final=True)
+                        func_name = tool_call['function']['name']
+                        tool_call_id = tool_call['id']
+                        func_to_call = self.tool_functions.get(func_name)
 
-                    # Finalize the assistant message
-                    self.chat_history.append({'role': 'assistant', 'content': full_text})
-                    self._append_to_log('assistant', full_text)
+                        if not func_to_call:
+                            err = f"Tool '{func_name}' not found."
+                            self.get_logger().error(err)
+                            self.chat_history.append({
+                                'tool_call_id': tool_call_id, 'role': 'tool',
+                                'name': func_name, 'content': err})
+                            continue
 
-                    # Publish the full message
-                    resp_msg = String()
-                    resp_msg.data = full_text
-                    self.pub_response.publish(resp_msg)
-                    self.pub_latest_turn.publish(resp_msg)
-                    break
+                        try:
+                            args_raw = tool_call['function']['arguments']
+                            args = json.loads(args_raw)
+                            self.get_logger().info(
+                                f"Calling tool '{func_name}' with args: {args_raw}")
+
+                            result = func_to_call(**args)
+
+                            c_str = (result if isinstance(result, str)
+                                     else json.dumps(result, ensure_ascii=False))
+
+                            # Log result preview for debugging
+                            res_preview = c_str[:500] + '...' if len(c_str) > 500 else c_str
+                            self.get_logger().debug(f"Tool '{func_name}' returned: {res_preview}")
+
+                            self.chat_history.append({
+                                'tool_call_id': tool_call_id, 'role': 'tool',
+                                'name': func_name, 'content': c_str})
+                        except Exception as e:
+                            self.get_logger().error(f'Tool {func_name} failed: {e}')
+                            self.chat_history.append({
+                                'tool_call_id': tool_call_id, 'role': 'tool',
+                                'name': func_name, 'content': str(e)})
+                    continue
                 else:
-                    # Non-streaming response
-                    if response.tool_calls:
-                        # Handle tool calls and repeat
-                        await self._process_tool_calls(response)
-                        tool_call_count += 1
-                        continue
-                    else:
-                        # Final textual response
-                        content = response.content
-                        self.chat_history.append({'role': 'assistant', 'content': content})
-                        self._append_to_log('assistant', content)
-
-                        # Publish
-                        resp_msg = String()
-                        resp_msg.data = content
-                        self.pub_response.publish(resp_msg)
-                        self.pub_latest_turn.publish(resp_msg)
-                        break
+                    break
 
             if tool_call_count >= max_calls:
-                self.get_logger().warn('Maximum number of consecutive tool calls reached.')
+                err = f'Max tool calls ({max_calls}) reached.'
+                self.get_logger().warning(err)
+                self.pub_response.publish(String(data='Too many tool calls.'))
+                return
 
-        except Exception as e:
-            self.get_logger().error(f'Error handling prompt: {e}')
+            if self._cancel_requested:
+                return
+
+            if stream_enabled:
+                full_response = ''
+                tool_choice = self.get_parameter('tool_choice').value
+                for chunk in self.llm_client.process_prompt_stream(
+                    self.chat_history,
+                    tool_choice=tool_choice
+                ):
+                    if self._cancel_requested:
+                        self.pub_response.publish(String(data='[Cancelled]'))
+                        return
+                    if chunk:
+                        full_response += chunk
+                        self.pub_stream.publish(String(data=chunk))
+
+                eof_str = self.get_parameter('eof').value
+                if eof_str:
+                    self.pub_stream.publish(String(data=eof_str))
+
+                self.pub_response.publish(String(data=full_response))
+                assistant_message = {'role': 'assistant', 'content': full_response}
+                self.chat_history.append(assistant_message)
+                self._publish_latest_turn(prompt_text_for_log, assistant_message)
+            else:
+                tool_choice = self.get_parameter('tool_choice').value
+                success, final_message = self.llm_client.process_prompt(
+                    self.chat_history,
+                    tool_choice=tool_choice
+                )
+                if self._cancel_requested:
+                    return
+                if success and final_message.get('content'):
+                    res_text = final_message['content']
+                    self.pub_response.publish(String(data=res_text))
+                    self.chat_history.append(final_message)
+                    self._publish_latest_turn(prompt_text_for_log, final_message)
+                else:
+                    self.get_logger().error(f'Failed response: {final_message}')
+                    self.pub_response.publish(String(data='Error generating response.'))
         finally:
             self._is_generating = False
-            self._check_queue()
 
-    def _check_queue(self):
-        """Process the next prompt in the queue if available."""
-        if self._prompt_queue and not self._is_generating:
-            next_prompt = self._prompt_queue.popleft()
-            # Start through a one-shot timer to stay in the main event loop
-            self._queue_timer = self.create_timer(
-                self._queue_timer_period,
-                lambda: self._handle_queued_prompt(next_prompt),
-                callback_group=ReentrantCallbackGroup()
-            )
+    def _process_queue_callback(self):
+        """Timer callback to process queued prompts."""
+        if self._is_generating:
+            return
+        if not self._prompt_queue:
+            if self._queue_timer is not None:
+                self._queue_timer.cancel()
+                self._queue_timer = None
+            return
+        prompt_data = self._prompt_queue.popleft()
+        msg = String()
+        msg.data = prompt_data
+        self.prompt_callback(msg)
 
-    def _handle_queued_prompt(self, prompt):
-        """Handle a prompt that was taken from the queue."""
-        if self._queue_timer:
-            self._queue_timer.cancel()
-            self._queue_timer = None
+    def on_params_changed(self, params):
+        """Handle parameter changes at runtime."""
+        from rcl_interfaces.msg import SetParametersResult
+        result = SetParametersResult(successful=True)
 
-        # Use existing async infrastructure
-        loop = (rclpy.get_global_executor()._loop if rclpy.get_global_executor()
-                else asyncio.get_event_loop())
-        asyncio.run_coroutine_threadsafe(self._handle_prompt(prompt), loop)
+        system_prompt_updated = False
+        client_params_updated = False
 
-    def prompt_callback(self, msg):
-        """Handle incoming prompts from the subscriber."""
-        self.get_logger().info(f"Received prompt: '{msg.data}'")
-        # Run the async handler in the executor's loop
-        asyncio.ensure_future(self._handle_prompt(msg.data))
+        for param in params:
+            if param.name in ['system_prompt', 'system_prompt_file']:
+                system_prompt_updated = True
+            elif param.name in [
+                'temperature', 'top_p', 'max_tokens', 'presence_penalty',
+                'frequency_penalty', 'api_timeout', 'stop', 'api_url',
+                'api_key', 'api_model', 'eof'
+            ]:
+                client_params_updated = True
+            elif param.name == 'response_format':
+                try:
+                    if param.value:
+                        json.loads(param.value)
+                    client_params_updated = True
+                except json.JSONDecodeError as e:
+                    result.successful = False
+                    result.reason = f'Invalid JSON for response_format: {e}'
+                    return result
+
+        if system_prompt_updated:
+            # We need to update the system prompt in the chat history.
+            # Usually it's the first message.
+            new_prompt = self._load_system_prompt()
+            if self.chat_history and self.chat_history[0]['role'] == 'system':
+                self.chat_history[0]['content'] = new_prompt
+                self.get_logger().info('System prompt updated in chat history.')
+            else:
+                # If no system prompt was present, insert it at the beginning
+                self.chat_history.insert(0, {'role': 'system', 'content': new_prompt})
+                self._prefix_history_len += 1
+                self.get_logger().info('System prompt added to chat history.')
+
+        if client_params_updated and hasattr(self, 'llm_client'):
+            # Update client attributes dynamically.
+            # Note: We might need to refresh headers if api_key changes.
+            for param in params:
+                if param.name == 'temperature':
+                    self.llm_client.temperature = param.value
+                elif param.name == 'top_p':
+                    self.llm_client.top_p = param.value
+                elif param.name == 'max_tokens':
+                    self.llm_client.max_tokens = param.value
+                elif param.name == 'presence_penalty':
+                    self.llm_client.presence_penalty = param.value
+                elif param.name == 'frequency_penalty':
+                    self.llm_client.frequency_penalty = param.value
+                elif param.name == 'api_timeout':
+                    self.llm_client.timeout = param.value
+                elif param.name == 'stop':
+                    self.llm_client.stop = list(param.value)
+                elif param.name == 'api_url':
+                    self.llm_client.api_url = param.value.rstrip('/') + '/chat/completions'
+                elif param.name == 'api_model':
+                    self.llm_client.model = param.value
+                elif param.name == 'api_key':
+                    self.llm_client.api_key = param.value
+                    if param.value:
+                        self.llm_client.headers['Authorization'] = f'Bearer {param.value}'
+                    elif 'Authorization' in self.llm_client.headers:
+                        del self.llm_client.headers['Authorization']
+                elif param.name == 'response_format':
+                    if param.value:
+                        self.llm_client.response_format = json.loads(param.value)
+                    else:
+                        self.llm_client.response_format = None
+
+            self.get_logger().info('LLM client parameters updated.')
+
+        return result
 
 
 def main(args=None):
-    """Run the main entry point for the LLM node."""
     rclpy.init(args=args)
-    node = LLMNode()
+    llm_node = LLMNode()
     executor = MultiThreadedExecutor()
-    executor.add_node(node)
-
+    executor.add_node(llm_node)
     try:
         executor.spin()
     except KeyboardInterrupt:
-        pass
+        llm_node.get_logger().info('Shutting down node...')
     finally:
-        node.destroy_node()
+        llm_node.destroy_node()
         rclpy.shutdown()
 
 
