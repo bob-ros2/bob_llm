@@ -12,7 +12,7 @@ Changelog for package bob_llm
 * Enhanced tool execution logging with result previews for better debugging
 * Removed prefix v1 from chat API path
 * Added support for [Agentskills](https://agentskills.io/) specification
-* Removed example tool interfaces in favor of the new modular skill system-based approach
+* Added native Qdrant vector database tools with environment variable configuration
 
 1.0.2 (2026-02-01)
 ------------------

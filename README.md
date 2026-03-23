@@ -284,12 +284,26 @@ Add the absolute path to `config/ros_cli_tools.py` to your `tool_interfaces` par
 
 #### 2. Qdrant Memory Tools (`config/qdrant_tools.py`)
 
-This module enables long-term memory for the LLM using the Qdrant vector database.
+This module enables long-term memory for the LLM using a native Qdrant vector database interface.
 
 **Features:**
 -   `save_memory`: Stores information with optional metadata.
 -   `search_memory`: Semantically searches for relevant information in the database.
 
+**Configuration:**
+The Qdrant tool is configured via **environment variables** to keep the core node clean.
+
+| Environment Variable | Description | Default |
+| --- | --- | --- |
+| `LLM_QDRANT_LOCATION` | Qdrant location (`:memory:`, path, or URL) | `:memory:` |
+| `LLM_QDRANT_API_KEY` | API key for a remote Qdrant server | `''` |
+| `LLM_QDRANT_COLLECTION` | Qdrant collection name | `bob_memory` |
+
+**Requirements:**
+Requires `qdrant-client` to be installed:
+```bash
+pip install -r src/bob_llm/requirements.txt
+```
+
 **Usage:**
 Add the absolute path to `config/qdrant_tools.py` to your `tool_interfaces` parameter.
-The node will load all specified tool files at startup.
