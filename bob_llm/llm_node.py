@@ -20,7 +20,6 @@ import json
 import logging
 import mimetypes
 import os
-
 from ament_index_python.packages import get_package_share_directory
 from bob_llm.backend_clients import OpenAICompatibleClient
 from bob_llm.tool_utils import register as default_register
@@ -205,7 +204,7 @@ class LLMNode(Node):
         )
         self.declare_parameter(
             'tool_interfaces',
-            [],
+            [''],
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING_ARRAY,
                 description='A list of Python modules or file paths to load as tools.'
@@ -418,6 +417,8 @@ class LLMNode(Node):
         all_tools = []
         all_functions = {}
         for path_str in tool_modules_paths:
+            if not path_str:
+                continue
             try:
                 # Check if the path is a file, otherwise treat it as a module
                 if path_str.endswith('.py') and os.path.exists(path_str):
