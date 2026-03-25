@@ -178,7 +178,7 @@ def main(args=None):
         '[dim]Usage: Press [bold yellow]Enter[/] to send, '
         'or [bold yellow]Alt+Enter[/] (Esc then Enter) for a new line.[/dim]'
     )
-    console.print('[dim]Type \'exit\' or \'quit\' to end the session.\n[/dim]')
+    console.print("[dim]Type 'exit' or 'quit' to end the session.\n[/dim]")
 
     bindings = KeyBindings()
 
