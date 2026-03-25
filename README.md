@@ -45,7 +45,7 @@ The `bob_llm` package provides a ROS 2 node (`llm node`) that acts as a powerful
 Ensure your LLM server is active and the `api_url` in your params file is correct.
 
 ```bash
-ros2 run bob_llm llm --ros-args --params-file src/bob_llm/config/node_params.yaml
+ros2 run bob_llm llm --ros-args --params-file /path/to/your/ros2_ws/src/bob_llm/config/node_params.yaml
 ```
 
 ### 2. Enter Interactive Chat
@@ -56,7 +56,7 @@ Interact with Bob through a dedicated, interactive terminal client.
 # Start standard chat
 ros2 run bob_llm chat
 
-# Start with premium boxed UI
+# Start with premium boxed UI (visual panels)
 ros2 run bob_llm chat --panels
 ```
 
@@ -69,7 +69,7 @@ ros2 run bob_llm chat --panels
 | `--topic_tools` | `llm_tool_calls` | Topic for skill execution feedback. |
 | `--panels` | `False` | Enable decorative boxes around messages. |
 
-#### Example Session
+#### Chat Example
 
 ```text
 Chat for https://github.com/bob-ros2/bob_llm
@@ -89,6 +89,9 @@ LLM: Ich sehe folgende aktive Komponenten im System:
 
 The node supports advanced input formats beyond simple text. If the input message on `/llm_prompt` is valid JSON, it is parsed as a message object.
 
+**Generic JSON Input:**
+You can pass any valid JSON dictionary. If it contains a `role` field (e.g., `user`), it is treated as a standard message object and appended to the history.
+
 **Image Helper:**
 If `process_image_urls` is enabled, the node automatically base64-encodes images from `file://` or `http://` URLs.
 
@@ -98,43 +101,79 @@ ros2 topic pub /llm_prompt std_msgs/msg/String "data: '{\"role\": \"user\", \"co
 
 ## ROS 2 API
 
-| Topic | Type | Path |
+| Topic | Type | Description |
 | :--- | :--- | :--- |
-| `/llm_prompt` | `std_msgs/msg/String` | Incoming prompts (Sub) |
-| `/llm_response` | `std_msgs/msg/String` | Final complete string (Pub) |
-| `/llm_stream` | `std_msgs/msg/String` | Real-time token stream (Pub) |
-| `/llm_tool_calls` | `std_msgs/msg/String` | JSON info about used skills (Pub) |
-| `/llm_latest_turn`| `std_msgs/msg/String` | Last User/Bot pair as JSON (Pub) |
+| `/llm_prompt` | `std_msgs/msg/String` | **(Subscribed)** Receives user prompts. |
+| `/llm_response` | `std_msgs/msg/String` | **(Published)** Final, complete response from the LLM. |
+| `/llm_stream` | `std_msgs/msg/String` | **(Published)** token-by-token chunks of the response. |
+| `/llm_tool_calls` | `std_msgs/msg/String` | **(Published)** JSON info about tool execution for clients. |
+| `/llm_latest_turn`| `std_msgs/msg/String` | **(Published)** Latest turn as JSON array of messages. |
 
 
-## Configuration (node_params.yaml)
+## Configuration
 
-| Parameter | Default | Description |
-| :--- | :--- | :--- |
-| `api_url` | `http://localhost:8000/v1` | Your LLM server URL. |
-| `api_model` | `gpt-4` | Model name. |
-| `max_history_length`| `10` | Conversation memory (in turns). |
-| `max_tool_calls` | `5` | Recursion limit for skills. |
-| `tool_interfaces` | `[]` | List of Python files containing skills. |
-| `skill_dir` | `./config/skills` | Location for Anthropic standard skills. |
+The node is configured through a ROS parameters YAML file. Most parameters support **dynamic reconfiguration** at runtime.
+
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `api_type` | string | `openai` | LLM backend API type. |
+| `api_url` | string | `http://...` | Base URL of the LLM backend. |
+| `api_key` | string | `no_key` | API key for authentication. |
+| `api_model` | string | `""` | Specific model name (e.g., "gpt-4"). |
+| `system_prompt` | string | `""` | System context instructions. |
+| `max_history_length` | integer | `10` | Max conversation turns to remember. |
+| `max_tool_calls` | integer | `5` | Max consecutive tool calls allowed. |
+| `stream` | bool | `true` | Enable/disable token streaming. |
+| `temperature` | double | `0.7` | Output randomness. |
+| `tool_interfaces` | string array | `[]` | Paths to Python tool files. |
+| `skill_dir` | string | `./config/skills` | Directory where skills are stored. |
+
+### Structured JSON Output
+
+The `response_format` parameter enables structured output, forcing the LLM to respond with valid JSON.
+
+#### JSON Object Mode
+Force the LLM to output valid JSON by setting `response_format` to `{"type": "json_object"}`. Note: Your prompt **must** mention the word "JSON".
+
+#### JSON Schema Mode (Strict)
+Define an exact schema the LLM must follow:
+```yaml
+response_format: |
+  {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "robot_command",
+      "strict": true,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "action": {"type": "string", "enum": ["move", "stop"]},
+          "speed": {"type": "number"}
+        },
+        "required": ["action"]
+      }
+    }
+  }
+```
+
+### Conversation Logging
+
+Set the `message_log` parameter to an absolute file path (e.g., `/home/user/chat.json`) to save the entire conversation history.
 
 ---
 
-## Skill System (Agentskills)
+## Tool System
 
+### Creating a Tool File
+A tool file is a standard Python script containing functions with docstrings. The system automatically mirrors these functions as tools for the LLM.
+
+### Skill System (Agentskills)
 The `bob_llm` node implements the [Anthropic Agent Skills](https://agentskills.io/specification) specification.
 
-### 1. Skill Tools (`config/skill_tools.py`)
-This module allows the LLM to **discover**, **learn**, and **execute** skills from a directory.
+#### 1. Skill Discovery
+Add the path of `config/skill_tools.py` to your `tool_interfaces` to enable the skill discovery API (`load_skill_info`, `execute_skill_script`, etc.).
 
-### 2. Usage
-Add the absolute path of `config/skill_tools.py` to your `tool_interfaces` and set the `skill_dir`:
-
-```yaml
-llm:
-  ros__parameters:
-    tool_interfaces: ["/path/to/skill_tools.py"]
-    skill_dir: "/path/to/my/skills"
-```
-
-The LLM will automatically discover skills by reading `SKILL.md` files and can run their scripts using the `execute_skill_script` tool.
+#### 2. Ready-to-use Tools
+- **ROS CLI Tools (`config/ros_cli_tools.py`):** Inspect and control the ROS system.
+- **Qdrant Memory Tools (`config/qdrant_tools.py`):** Semantic long-term memory.
+    - Configured via `LLM_QDRANT_LOCATION`, `LLM_QDRANT_COLLECTION`, etc.
