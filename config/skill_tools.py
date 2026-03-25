@@ -19,10 +19,9 @@ import shlex
 import subprocess
 from typing import Any, List
 
-import rclpy
-
 from bob_llm.tool_utils import register as default_register
 from bob_llm.tool_utils import Tool
+import rclpy
 
 
 class _NodeContext:
