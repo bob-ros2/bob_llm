@@ -165,6 +165,10 @@ def main(args=None):
         help='ROS Topic to receive final complete responses'
     )
     parser.add_argument(
+        '--topic_tools', default='llm_tool_calls',
+        help='ROS Topic to receive tool call notifications'
+    )
+    parser.add_argument(
         '--panels', action='store_true',
         help='Enable premium boxed UI (default: off)'
     )
