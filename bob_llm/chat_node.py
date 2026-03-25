@@ -166,10 +166,6 @@ def main(args=None):
         '[bold green]Chat for https://github.com/bob-ros2/bob_llm[/]'
     )
     console.print(
-        '[dim]Features: Markdown Rendering, '
-        'Multiline Input, Free Cursor Move.[/dim]'
-    )
-    console.print(
         '[dim]Usage: Press [bold yellow]Enter[/] to send, '
         'or [bold yellow]Alt+Enter[/] (Esc then Enter) for a new line.[/dim]'
     )
