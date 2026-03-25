@@ -28,6 +28,7 @@ try:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.styles import Style
+    from rich.box import ROUNDED
     from rich.console import Console
     from rich.live import Live
     from rich.markdown import Markdown
@@ -74,9 +75,15 @@ class BobChatClient(Node):
             self.is_receiving = True
             # No separate print header needed as we use the Panel title
             self.live = Live(
-                Panel(Markdown(''), title='LLM', border_style='blue'),
+                Panel(
+                    Markdown(''),
+                    title='LLM',
+                    border_style='blue',
+                    box=ROUNDED
+                ),
                 console=self.console,
-                auto_refresh=False
+                auto_refresh=False,
+                vertical_overflow='visible'
             )
             self.live.start()
 
@@ -85,7 +92,8 @@ class BobChatClient(Node):
             Panel(
                 Markdown(self.full_content),
                 title='LLM',
-                border_style='blue'
+                border_style='blue',
+                box=ROUNDED
             ),
             refresh=True
         )
@@ -215,7 +223,12 @@ def main(args=None):
 
             # Print the input in a nice box
             console.print(
-                Panel(cleaned_input, title='YOU', border_style='green')
+                Panel(
+                    cleaned_input,
+                    title='YOU',
+                    border_style='green',
+                    box=ROUNDED
+                )
             )
 
             client_node.send_prompt(cleaned_input)
