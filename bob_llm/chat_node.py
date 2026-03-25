@@ -31,6 +31,7 @@ try:
     from rich.console import Console
     from rich.live import Live
     from rich.markdown import Markdown
+    from rich.panel import Panel
 except ImportError:
     print('Error: Required libraries not found.')
     print('Please install them using:')
@@ -71,7 +72,7 @@ class BobChatClient(Node):
         if not self.is_receiving:
             self.full_content = ''
             self.is_receiving = True
-            self.console.print('\n[bold blue]LLM:[/]')
+            self.console.print(Panel('[bold blue]Bob is thinking...[/]', title='BOB', border_style='blue'))
             self.live = Live(
                 Markdown(''), console=self.console, auto_refresh=False
             )
@@ -170,11 +171,11 @@ def main(args=None):
         event.current_buffer.insert_text('\n')
 
     style = Style.from_dict({
-        'prompt': 'ansigreen bold',
+        'prompt': 'ansicyan bold',
     })
 
     session = PromptSession(
-        message=[('class:prompt', 'You:\n> ')],
+        message=[('class:prompt', '❯ ')],
         multiline=True,
         key_bindings=bindings,
         style=style
@@ -195,6 +196,9 @@ def main(args=None):
 
             if cleaned_input.lower() in ['exit', 'quit']:
                 break
+
+            # Print the input in a nice box
+            console.print(Panel(cleaned_input, title='YOU', border_style='green'))
 
             client_node.send_prompt(cleaned_input)
             client_node.waiting_for_response = True
