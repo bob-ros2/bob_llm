@@ -302,6 +302,8 @@ class LLMNode(Node):
 
         self.pub_latest_turn = self.create_publisher(
             String, 'llm_latest_turn', DEFAULT_QUEUE_SIZE)
+        self.pub_tool_calls = self.create_publisher(
+            String, 'llm_tool_calls', DEFAULT_QUEUE_SIZE)
 
         # Register parameter update callback
         self.add_on_set_parameters_callback(self.on_params_changed)
@@ -698,6 +700,14 @@ class LLMNode(Node):
                             args = json.loads(args_raw)
                             self.get_logger().info(
                                 f"Calling tool '{func_name}' with args: {args_raw}")
+
+                            # Publish tool call for visual feedback in chat clients
+                            tool_info = {
+                                'name': func_name,
+                                'arguments': args_raw,
+                                'id': tool_call_id
+                            }
+                            self.pub_tool_calls.publish(String(data=json.dumps(tool_info)))
 
                             result = func_to_call(**args)
 

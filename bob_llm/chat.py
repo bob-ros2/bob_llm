@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import argparse
+import json
 import os
 import sys
 import threading
@@ -42,7 +43,8 @@ class BobChatClient(Node):
         self,
         topic_in='llm_prompt',
         topic_out='llm_stream',
-        topic_response='llm_response'
+        topic_response='llm_response',
+        topic_tools='llm_tool_calls'
     ):
         super().__init__('bob_chat_client')
         self.pub_prompt = self.create_publisher(String, topic_in, 10)
@@ -51,6 +53,9 @@ class BobChatClient(Node):
         )
         self.sub_response = self.create_subscription(
             String, topic_response, self.response_callback, 10
+        )
+        self.sub_tools = self.create_subscription(
+            String, topic_tools, self.tool_callback, 10
         )
 
         self.console = Console()
@@ -86,6 +91,19 @@ class BobChatClient(Node):
             self.console.print('')
         self.waiting_for_response = False
 
+    def tool_callback(self, msg):
+        try:
+            call = json.loads(msg.data)
+            name = call.get('name', 'unknown')
+            args = call.get('arguments', '{}')
+            self.console.print(
+                f'\n[bold yellow][*] SKILL CALLING: {name}({args})[/]'
+            )
+            # Reset idle timer because tools took time
+            self.last_stream_time = time.time()
+        except Exception as e:
+            self.get_logger().error(f'Failed to parse tool call message: {e}')
+
     def send_prompt(self, text):
         msg = String()
         msg.data = text
@@ -106,6 +124,10 @@ def main(args=None):
         '--topic_response', default='llm_response',
         help='ROS Topic to receive final complete responses'
     )
+    parser.add_argument(
+        '--topic_tools', default='llm_tool_calls',
+        help='ROS Topic to receive tool call notifications'
+    )
 
     parsed_args, ros_args = parser.parse_known_args(sys.argv[1:])
 
@@ -113,7 +135,8 @@ def main(args=None):
     client_node = BobChatClient(
         topic_in=parsed_args.topic_in,
         topic_out=parsed_args.topic_out,
-        topic_response=parsed_args.topic_response
+        topic_response=parsed_args.topic_response,
+        topic_tools=parsed_args.topic_tools
     )
 
     # Spin the ROS node in a separate background thread
