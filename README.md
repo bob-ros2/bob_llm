@@ -249,7 +249,6 @@ This module provides the core interface for the LLM to interact with its skills 
 - **Discover**: List available skills in the `skill_dir`.
 - **Learn**: Read `SKILL.md` files to understand how to use a specific skill.
 - **Create/Modify**: Write new skill files or update existing ones (logic, scripts).
-- **Download**: Pull new skills from remote repositories (ZIP format).
 - **Execute**: Run scripts bundled within a skill.
 
 #### 2. Skill Structure
@@ -269,6 +268,18 @@ llm:
     tool_interfaces:
       - "/path/to/bob_llm/config/skill_tools.py"
     skill_dir: "./config/skills"
+```
+
+#### 4. How to Use Skills (Minimal Guide)
+
+To create and use a skill:
+1. Create a new folder in your configured `skill_dir` (e.g., `config/skills/my_skill`).
+2. Add a `SKILL.md` file containing YAML frontmatter (`name` and `description`).
+3. Add your executable scripts (e.g., `scripts/run.py`) and make them executable (`chmod +x`).
+
+The LLM will automatically discover the skill through its metadata and can interact with it using the `execute_skill_script` tool:
+```python
+execute_skill_script(skill_name="my_skill", script_path="scripts/run.py", args="--some-arg")
 ```
 
 ### Inbuilt Tools

@@ -13,6 +13,7 @@ Changelog for package bob_llm
 * Removed prefix v1 from chat API path
 * Added support for [Agentskills](https://agentskills.io/) specification
 * Added native Qdrant vector database tools with environment variable configuration
+* Refactored Agent Skills implementation to strictly follow progressive disclosure
 
 1.0.2 (2026-02-01)
 ------------------

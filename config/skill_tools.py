@@ -18,9 +18,6 @@ import os
 import shlex
 import subprocess
 from typing import Any, List
-import urllib.request
-import zipfile
-
 from bob_llm.tool_utils import register as default_register
 from bob_llm.tool_utils import Tool
 import rclpy
@@ -128,34 +125,6 @@ def write_skill_file(skill_name: str, filename: str, content: str) -> str:
         return f'Successfully wrote {filename} in skill {skill_name}.'
     except Exception as e:
         return f'Error writing file: {e}'
-
-
-def download_skill(url: str, skill_name: str) -> str:
-    """
-    Download a skill (ZIP format) from Anthropic/Agentskills or another URL and extract it.
-
-    :param url: The URL to the skill ZIP file.
-    :param skill_name: The name under which the skill will be saved.
-    """
-    skill_dir = _get_skill_dir()
-    path = os.path.join(skill_dir, skill_name)
-
-    # Check for write permissions
-    if os.path.exists(skill_dir) and not os.access(skill_dir, os.W_OK):
-        return (f"Error: Directory '{skill_dir}' is READ-ONLY. "
-                'To enable downloading skills, change permissions or '
-                "set 'skill_dir' to a writable path.")
-
-    try:
-        os.makedirs(path, exist_ok=True)
-        zip_path = os.path.join(path, 'downloaded.zip')
-        urllib.request.urlretrieve(url, zip_path)
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(path)
-        os.remove(zip_path)
-        return f'Successfully downloaded and extracted skill {skill_name}.'
-    except Exception as e:
-        return f'Error downloading skill: {e}'
 
 
 def execute_skill_script(skill_name: str, script_path: str, args: str = '') -> str:
