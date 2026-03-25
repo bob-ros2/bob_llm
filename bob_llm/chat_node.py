@@ -72,7 +72,7 @@ class BobChatClient(Node):
         if not self.is_receiving:
             self.full_content = ''
             self.is_receiving = True
-            self.console.print(Panel('[bold blue]Bob is thinking...[/]', title='BOB', border_style='blue'))
+            self.console.print('\n[bold blue]BOB:[/]')
             self.live = Live(
                 Markdown(''), console=self.console, auto_refresh=False
             )
@@ -196,6 +196,11 @@ def main(args=None):
 
             if cleaned_input.lower() in ['exit', 'quit']:
                 break
+
+            # Clear the raw input line from terminal to avoid "double prompt"
+            # \033[F moves cursor up, \033[K clears the line
+            sys.stdout.write('\033[F\033[K')
+            sys.stdout.flush()
 
             # Print the input in a nice box
             console.print(Panel(cleaned_input, title='YOU', border_style='green'))
