@@ -74,7 +74,7 @@ class BobChatClient(Node):
             self.is_receiving = True
             # No separate print header needed as we use the Panel title
             self.live = Live(
-                Panel(Markdown(''), title='BOB', border_style='blue'),
+                Panel(Markdown(''), title='LLM', border_style='blue'),
                 console=self.console,
                 auto_refresh=False
             )
@@ -84,7 +84,7 @@ class BobChatClient(Node):
         self.live.update(
             Panel(
                 Markdown(self.full_content),
-                title='BOB',
+                title='LLM',
                 border_style='blue'
             ),
             refresh=True
@@ -107,7 +107,11 @@ class BobChatClient(Node):
             name = call.get('name', 'unknown')
             args = call.get('arguments', '{}')
             self.console.print(
-                f'[bold yellow][*] SKILL CALLING: {name}({args})[/]'
+                Panel(
+                    f'[bold yellow]Calling: {name}({args})[/]',
+                    title='SKILL',
+                    border_style='yellow'
+                )
             )
             # Reset idle timer because tools took time
             self.last_stream_time = time.time()
@@ -158,7 +162,9 @@ def main(args=None):
     spin_thread.start()
 
     console = client_node.console
-    console.print('[bold green]--- Bob LLM Premium Chat ---[/]')
+    console.print(
+        '[bold green]Chat for https://github.com/bob-ros2/bob_llm[/]'
+    )
     console.print(
         '[dim]Features: Markdown Rendering, '
         'Multiline Input, Free Cursor Move.[/dim]'
@@ -212,7 +218,9 @@ def main(args=None):
             sys.stdout.flush()
 
             # Print the input in a nice box
-            console.print(Panel(cleaned_input, title='YOU', border_style='green'))
+            console.print(
+                Panel(cleaned_input, title='YOU', border_style='green')
+            )
 
             client_node.send_prompt(cleaned_input)
             client_node.waiting_for_response = True
