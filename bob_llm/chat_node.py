@@ -116,9 +116,10 @@ class BobChatClient(Node):
             args = call.get('arguments', '{}')
             self.console.print(
                 Panel(
-                    f'[bold yellow]Calling: {name}({args})[/]',
+                    f'[yellow]Calling: {name}({args})[/]',
                     title='SKILL',
-                    border_style='yellow'
+                    border_style='yellow',
+                    box=ROUNDED
                 )
             )
             # Reset idle timer because tools took time
