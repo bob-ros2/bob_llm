@@ -58,8 +58,10 @@ class BobChatClient(Node):
         self.full_content = ''
         self.is_receiving = False
         self.waiting_for_response = False
+        self.last_stream_time = 0.0
 
     def stream_callback(self, msg):
+        self.last_stream_time = time.time()
         chunk = msg.data
         if not self.is_receiving:
             self.full_content = ''
@@ -178,6 +180,12 @@ def main(args=None):
                 # Wait for response to finish
                 while client_node.waiting_for_response and rclpy.ok():
                     time.sleep(0.1)
+                    # Auto-fallback if the final response message was lost
+                    # or the user forgot to set --topic_response correctly
+                    if client_node.is_receiving:
+                        idle_time = time.time() - client_node.last_stream_time
+                        if idle_time > 5.0:
+                            client_node.response_callback(None)
             except KeyboardInterrupt:
                 client_node.waiting_for_response = False
                 if client_node.is_receiving:
