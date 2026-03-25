@@ -72,14 +72,23 @@ class BobChatClient(Node):
         if not self.is_receiving:
             self.full_content = ''
             self.is_receiving = True
-            self.console.print('\n[bold blue]BOB:[/]')
+            # No separate print header needed as we use the Panel title
             self.live = Live(
-                Markdown(''), console=self.console, auto_refresh=False
+                Panel(Markdown(''), title='BOB', border_style='blue'),
+                console=self.console,
+                auto_refresh=False
             )
             self.live.start()
 
         self.full_content += chunk
-        self.live.update(Markdown(self.full_content), refresh=True)
+        self.live.update(
+            Panel(
+                Markdown(self.full_content),
+                title='BOB',
+                border_style='blue'
+            ),
+            refresh=True
+        )
 
     def response_callback(self, msg):
         # We don't read the full msg.data here since we streamed it already,
