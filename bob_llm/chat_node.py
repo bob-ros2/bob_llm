@@ -46,9 +46,11 @@ class BobChatClient(Node):
         topic_in='llm_prompt',
         topic_out='llm_stream',
         topic_response='llm_response',
-        topic_tools='llm_tool_calls'
+        topic_tools='llm_tool_calls',
+        panels=False
     ):
         super().__init__('bob_chat_client')
+        self.panels = panels
         self.pub_prompt = self.create_publisher(String, topic_in, 10)
         self.sub_stream = self.create_subscription(
             String, topic_out, self.stream_callback, 10
@@ -73,30 +75,40 @@ class BobChatClient(Node):
         if not self.is_receiving:
             self.full_content = ''
             self.is_receiving = True
-            # No separate print header needed as we use the Panel title
-            self.live = Live(
-                Panel(
+            if self.panels:
+                self.live = Live(
+                    Panel(
+                        Markdown(''),
+                        title='LLM',
+                        border_style='blue',
+                        box=ROUNDED
+                    ),
+                    console=self.console,
+                    auto_refresh=False,
+                    vertical_overflow='visible'
+                )
+            else:
+                self.console.print('\n[bold blue]LLM:[/]')
+                self.live = Live(
                     Markdown(''),
+                    console=self.console,
+                    auto_refresh=False
+                )
+            self.live.start()
+
+        self.full_content += chunk
+        if self.panels:
+            self.live.update(
+                Panel(
+                    Markdown(self.full_content),
                     title='LLM',
                     border_style='blue',
                     box=ROUNDED
                 ),
-                console=self.console,
-                auto_refresh=False,
-                vertical_overflow='visible'
+                refresh=True
             )
-            self.live.start()
-
-        self.full_content += chunk
-        self.live.update(
-            Panel(
-                Markdown(self.full_content),
-                title='LLM',
-                border_style='blue',
-                box=ROUNDED
-            ),
-            refresh=True
-        )
+        else:
+            self.live.update(Markdown(self.full_content), refresh=True)
 
     def response_callback(self, msg):
         # We don't read the full msg.data here since we streamed it already,
@@ -114,14 +126,19 @@ class BobChatClient(Node):
             call = json.loads(msg.data)
             name = call.get('name', 'unknown')
             args = call.get('arguments', '{}')
-            self.console.print(
-                Panel(
-                    f'[yellow]Calling: {name}({args})[/]',
-                    title='SKILL',
-                    border_style='yellow',
-                    box=ROUNDED
+            if self.panels:
+                self.console.print(
+                    Panel(
+                        f'[yellow]Calling: {name}({args})[/]',
+                        title='SKILL',
+                        border_style='yellow',
+                        box=ROUNDED
+                    )
                 )
-            )
+            else:
+                self.console.print(
+                    f'[yellow][*] SKILL: {name}({args})[/]'
+                )
             # Reset idle timer because tools took time
             self.last_stream_time = time.time()
         except Exception as e:
@@ -148,10 +165,9 @@ def main(args=None):
         help='ROS Topic to receive final complete responses'
     )
     parser.add_argument(
-        '--topic_tools', default='llm_tool_calls',
-        help='ROS Topic to receive tool call notifications'
+        '--panels', action='store_true',
+        help='Enable premium boxed UI (default: off)'
     )
-
     parsed_args, ros_args = parser.parse_known_args(sys.argv[1:])
 
     rclpy.init(args=ros_args)
@@ -159,7 +175,8 @@ def main(args=None):
         topic_in=parsed_args.topic_in,
         topic_out=parsed_args.topic_out,
         topic_response=parsed_args.topic_response,
-        topic_tools=parsed_args.topic_tools
+        topic_tools=parsed_args.topic_tools,
+        panels=parsed_args.panels
     )
 
     # Spin the ROS node in a separate background thread
@@ -222,15 +239,18 @@ def main(args=None):
             sys.stdout.write('\033[F\033[K')
             sys.stdout.flush()
 
-            # Print the input in a nice box
-            console.print(
-                Panel(
-                    cleaned_input,
-                    title='YOU',
-                    border_style='green',
-                    box=ROUNDED
+            # Print the input
+            if client_node.panels:
+                console.print(
+                    Panel(
+                        cleaned_input,
+                        title='YOU',
+                        border_style='green',
+                        box=ROUNDED
+                    )
                 )
-            )
+            else:
+                console.print(f'\n[bold green]YOU:[/] {cleaned_input}')
 
             client_node.send_prompt(cleaned_input)
             client_node.waiting_for_response = True
