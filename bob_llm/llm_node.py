@@ -744,6 +744,7 @@ class LLMNode(Node):
                 tool_choice = self.get_parameter('tool_choice').value
                 for chunk in self.llm_client.process_prompt_stream(
                     self.chat_history,
+                    tools=self.tools if self.tools else None,
                     tool_choice=tool_choice
                 ):
                     if self._cancel_requested:
@@ -765,6 +766,7 @@ class LLMNode(Node):
                 tool_choice = self.get_parameter('tool_choice').value
                 success, final_message = self.llm_client.process_prompt(
                     self.chat_history,
+                    tools=self.tools if self.tools else None,
                     tool_choice=tool_choice
                 )
                 if self._cancel_requested:
