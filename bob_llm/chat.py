@@ -97,7 +97,7 @@ class BobChatClient(Node):
             name = call.get('name', 'unknown')
             args = call.get('arguments', '{}')
             self.console.print(
-                f'\n[bold yellow][*] SKILL CALLING: {name}({args})[/]'
+                f'[bold yellow][*] SKILL CALLING: {name}({args})[/]'
             )
             # Reset idle timer because tools took time
             self.last_stream_time = time.time()
