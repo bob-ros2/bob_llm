@@ -4,12 +4,6 @@ project(bob_llm)
 find_package(ament_cmake REQUIRED)
 find_package(std_msgs REQUIRED)
 
-# Install scripts
-install(
-    PROGRAMS
-    "scripts/query.sh"
-    DESTINATION lib/${PROJECT_NAME}
-)
 
 # Install a sample configuration
 install(
