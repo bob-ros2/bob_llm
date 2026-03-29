@@ -10,6 +10,7 @@ The `bob_llm` package provides a ROS 2 node (`llm node`) that acts as a powerful
 -   **OpenAI-Compatible:** Connects to any LLM backend that exposes an OpenAI-compatible API endpoint (e.g., `Ollama`, `vLLM`, `llama-cpp-python`, commercial APIs).
 -   **Stateful Conversation:** Maintains chat history to provide conversational context to the LLM.
 -   **Dynamic Tool System:** Dynamically loads Python functions from user-provided files and makes them available to the LLM. The LLM can request to call these functions to perform actions or gather information.
+-   **Anthropic Agent Skills:** Full support for the [Anthropic Agent Skills](https://agentskills.io) specification, enabling modular, self-contained capabilities with documentation and execution logic.
 -   **Streaming Support:** Can stream the LLM's final response token-by-token for real-time feedback.
 -   **Interactive Chat CLI:** Includes a premium terminal interface with Markdown rendering and multi-line support.
 -   **Multi-modality:** Supports multimodal input (e.g., images) via JSON prompts.
