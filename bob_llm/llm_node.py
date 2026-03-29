@@ -44,6 +44,7 @@ class LLMNode(Node):
 
     def __init__(self):
         super().__init__('llm')
+        self.llm_client = None
 
         # Synchronize logging level with ROS logger verbosity for library output.
         logging.basicConfig(
