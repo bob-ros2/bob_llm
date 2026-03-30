@@ -732,10 +732,11 @@ class LLMNode(Node):
                     break
 
             if tool_call_count >= max_calls:
-                err = f'Max tool calls ({max_calls}) reached.'
-                self.get_logger().warning(err)
-                self.pub_response.publish(String(data='Too many tool calls.'))
-                return
+                self.get_logger().warning(f'Max tool calls ({max_calls}) reached. Forcing final response.')
+                self.chat_history.append({
+                    'role': 'system',
+                    'content': 'Maximum tool calling limit reached. Please provide a final response based on the previous tool outputs.'
+                })
 
             if self._cancel_requested:
                 return
