@@ -14,6 +14,10 @@ Changelog for package bob_llm
 * Added support for [Agentskills](https://agentskills.io/) specification
 * Added native Qdrant vector database tools with environment variable configuration
 * Refactored Agent Skills implementation to strictly follow progressive disclosure
+* Fixed Race Condition in LLMNode initialization by pre-initializing llm_client
+* Implemented soft limit for tool calls with system hint for final response
+* Added premium interactive terminal chat client with Markdown and optional boxed UI
+* Cleaned up legacy scripts and modernized README documentation
 
 1.0.2 (2026-02-01)
 ------------------
