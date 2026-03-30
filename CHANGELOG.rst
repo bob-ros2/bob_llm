@@ -31,7 +31,7 @@ Changelog for package bob_llm
 * Standardize docstrings and copyright headers
 * Contributors: Bob Ros
 
-1.0.0 (2026-01-26)
+1.0.0 (2025-11-25)
 ------------------
 * Initial release of bob_llm
 * Contributors: Bob Ros
