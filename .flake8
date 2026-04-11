@@ -1,0 +1,7 @@
+[flake8]
+extend-ignore = E203, E501
+max-line-length = 79
+inline-quotes = single
+multiline-quotes = single
+docstring-quotes = double
+avoid-escape = True
