@@ -424,33 +424,100 @@ class LLMNode(Node):
             if not path_str:
                 continue
             try:
-                # Check if the path is a file, otherwise treat it as a module
+                # Handle directory of tools / skills
+                if os.path.isdir(path_str):
+                    self.get_logger().info(
+                        f"Scanning directory for skills: {path_str}")
+                    for f in os.listdir(path_str):
+                        full_f_path = os.path.join(path_str, f)
+                        
+                        # Identify potential tool modules
+                        target_py = None
+                        module_name = ""
+                        
+                        if f.endswith('.py') and os.path.isfile(full_f_path):
+                            target_py = full_f_path
+                            module_name = os.path.splitext(f)[0]
+                        elif os.path.isdir(full_f_path):
+                            # Check for handler or init in subdirectories
+                            for entry in ['handler.py', '__init__.py']:
+                                test_path = os.path.join(full_f_path, entry)
+                                if os.path.exists(test_path):
+                                    target_py = test_path
+                                    module_name = f
+                                    break
+                        
+                        if target_py:
+                            try:
+                                spec = importlib.util.spec_from_file_location(
+                                    module_name, target_py)
+                                module = importlib.util.module_from_spec(spec)
+                                spec.loader.exec_module(module)
+                                
+                                # Register functions
+                                if (hasattr(module, 'register') and
+                                        callable(getattr(module, 'register'))):
+                                    tools = module.register(module, self)
+                                else:
+                                    tools = default_register(module, self)
+                                
+                                for tool_def in tools:
+                                    func_name = tool_def['function']['name']
+                                    if hasattr(module, func_name):
+                                        if func_name in all_functions:
+                                            self.get_logger().error(
+                                                f"COLLISION: Tool '{func_name}' "
+                                                "already registered! Skipping "
+                                                f"from {module_name}.")
+                                            continue
+                                        all_functions[func_name] = getattr(module, func_name)
+                                        all_tools.append(tool_def)
+                                self.get_logger().debug(
+                                    f"Loaded skill module: {module_name} "
+                                    f"from {target_py}")
+                            except Exception as e:
+                                self.get_logger().error(
+                                    f"Failed to load skill {module_name}: {e}")
+                    continue
+
+                # Fallback: Check if the path is a standalone file
                 if path_str.endswith('.py') and os.path.exists(path_str):
-                    module_name = os.path.splitext(os.path.basename(path_str))[0]
-                    spec = importlib.util.spec_from_file_location(module_name, path_str)
+                    module_name = os.path.splitext(
+                        os.path.basename(path_str))[0]
+                    spec = importlib.util.spec_from_file_location(
+                        module_name, path_str)
                     module = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                     self.get_logger().debug(
                         f'Imported module from file: {path_str}')
                 else:
                     module = importlib.import_module(path_str)
-                    self.get_logger().info(f'Imported module by name: {path_str}')
+                    self.get_logger().info(
+                        f'Imported module by name: {path_str}')
 
-                # Use the module's register function if it exists, otherwise use the default
-                if hasattr(module, 'register') and callable(getattr(module, 'register')):
-                    self.get_logger().info(f"Using custom 'register' from {path_str}")
+                # Use the module's register function
+                if (hasattr(module, 'register') and
+                        callable(getattr(module, 'register'))):
+                    self.get_logger().info(
+                        f"Using custom 'register' from {path_str}")
                     tools = module.register(module, self)
                 else:
-                    self.get_logger().info(f"Using default 'register' for {path_str}")
+                    self.get_logger().info(
+                        f"Using default 'register' for {path_str}")
                     tools = default_register(module, self)
-
-                all_tools.extend(tools)
 
                 # Map function names from the schema to the actual callable functions
                 for tool_def in tools:
                     func_name = tool_def['function']['name']
                     if hasattr(module, func_name):
+                        if func_name in all_functions:
+                            self.get_logger().error(
+                                f"COLLISION: Tool '{func_name}' "
+                                "already registered! Skipping "
+                                f"from {module_name}.")
+                            continue
                         all_functions[func_name] = getattr(module, func_name)
+                        all_tools.append(tool_def)
 
             except ImportError as e:
                 self.get_logger().error(f'Failed to import tool module {path_str}: {e}')
@@ -646,7 +713,8 @@ class LLMNode(Node):
 
                     new_messages = [user_content]
                 else:
-                    new_messages = [{'role': 'user', 'content': str(json_data)}]
+                    new_messages = [
+                        {'role': 'user', 'content': str(json_data)}]
                     prompt_text_for_log = str(json_data)
             except json.JSONDecodeError:
                 new_messages = [{'role': 'user', 'content': msg.data}]
@@ -671,7 +739,8 @@ class LLMNode(Node):
                 )
 
                 if not success:
-                    self.get_logger().error(f'LLM request error: {response_message}')
+                    self.get_logger().error(
+                        f'LLM request error: {response_message}')
                     self.chat_history.pop()
                     return
 
@@ -700,7 +769,8 @@ class LLMNode(Node):
                             args_raw = tool_call['function']['arguments']
                             args = json.loads(args_raw)
                             self.get_logger().info(
-                                f"Calling tool '{func_name}' with args: {args_raw}")
+                                f"Calling tool '{func_name}' "
+                                f"with args: {args_raw}")
 
                             # Publish tool call for visual feedback in chat clients
                             tool_info = {
@@ -708,22 +778,27 @@ class LLMNode(Node):
                                 'arguments': args_raw,
                                 'id': tool_call_id
                             }
-                            self.pub_tool_calls.publish(String(data=json.dumps(tool_info)))
+                            self.pub_tool_calls.publish(
+                                String(data=json.dumps(tool_info)))
 
                             result = func_to_call(**args)
 
                             c_str = (result if isinstance(result, str)
-                                     else json.dumps(result, ensure_ascii=False))
+                                     else json.dumps(
+                                         result, ensure_ascii=False))
 
                             # Log result preview for debugging
-                            res_preview = c_str[:500] + '...' if len(c_str) > 500 else c_str
-                            self.get_logger().debug(f"Tool '{func_name}' returned: {res_preview}")
+                            res_preview = (c_str[:500] + '...'
+                                           if len(c_str) > 500 else c_str)
+                            self.get_logger().debug(
+                                f"Tool '{func_name}' returned: {res_preview}")
 
                             self.chat_history.append({
                                 'tool_call_id': tool_call_id, 'role': 'tool',
                                 'name': func_name, 'content': c_str})
                         except Exception as e:
-                            self.get_logger().error(f'Tool {func_name} failed: {e}')
+                            self.get_logger().error(
+                                f'Tool {func_name} failed: {e}')
                             self.chat_history.append({
                                 'tool_call_id': tool_call_id, 'role': 'tool',
                                 'name': func_name, 'content': str(e)})
@@ -733,7 +808,8 @@ class LLMNode(Node):
 
             if tool_call_count >= max_calls:
                 self.get_logger().warning(
-                    f'Max tool calls ({max_calls}) reached. Forcing final response.')
+                    f'Max tool calls ({max_calls}) reached. '
+                    'Forcing final response.')
                 self.chat_history.append({
                     'role': 'system',
                     'content': (
@@ -764,9 +840,11 @@ class LLMNode(Node):
                     self.pub_stream.publish(String(data=eof_str))
 
                 self.pub_response.publish(String(data=full_response))
-                assistant_message = {'role': 'assistant', 'content': full_response}
+                assistant_message = {
+                    'role': 'assistant', 'content': full_response}
                 self.chat_history.append(assistant_message)
-                self._publish_latest_turn(prompt_text_for_log, assistant_message)
+                self._publish_latest_turn(
+                    prompt_text_for_log, assistant_message)
             else:
                 tool_choice = self.get_parameter('tool_choice').value
                 success, final_message = self.llm_client.process_prompt(
@@ -780,10 +858,13 @@ class LLMNode(Node):
                     res_text = final_message['content']
                     self.pub_response.publish(String(data=res_text))
                     self.chat_history.append(final_message)
-                    self._publish_latest_turn(prompt_text_for_log, final_message)
+                    self._publish_latest_turn(
+                        prompt_text_for_log, final_message)
                 else:
-                    self.get_logger().error(f'Failed response: {final_message}')
-                    self.pub_response.publish(String(data='Error generating response.'))
+                    self.get_logger().error(
+                        f'Failed response: {final_message}')
+                    self.pub_response.publish(
+                        String(data='Error generating response.'))
         finally:
             self._is_generating = False
 
@@ -834,10 +915,12 @@ class LLMNode(Node):
             new_prompt = self._load_system_prompt()
             if self.chat_history and self.chat_history[0]['role'] == 'system':
                 self.chat_history[0]['content'] = new_prompt
-                self.get_logger().info('System prompt updated in chat history.')
+                self.get_logger().info(
+                    'System prompt updated in chat history.')
             else:
                 # If no system prompt was present, insert it at the beginning
-                self.chat_history.insert(0, {'role': 'system', 'content': new_prompt})
+                self.chat_history.insert(
+                    0, {'role': 'system', 'content': new_prompt})
                 self._prefix_history_len += 1
                 self.get_logger().info('System prompt added to chat history.')
 
@@ -860,18 +943,21 @@ class LLMNode(Node):
                 elif param.name == 'stop':
                     self.llm_client.stop = list(param.value)
                 elif param.name == 'api_url':
-                    self.llm_client.api_url = param.value.rstrip('/') + '/chat/completions'
+                    self.llm_client.api_url = param.value.rstrip('/') + \
+                        '/chat/completions'
                 elif param.name == 'api_model':
                     self.llm_client.model = param.value
                 elif param.name == 'api_key':
                     self.llm_client.api_key = param.value
                     if param.value:
-                        self.llm_client.headers['Authorization'] = f'Bearer {param.value}'
+                        self.llm_client.headers['Authorization'] = \
+                            f'Bearer {param.value}'
                     elif 'Authorization' in self.llm_client.headers:
                         del self.llm_client.headers['Authorization']
                 elif param.name == 'response_format':
                     if param.value:
-                        self.llm_client.response_format = json.loads(param.value)
+                        self.llm_client.response_format = json.loads(
+                            param.value)
                     else:
                         self.llm_client.response_format = None
 
