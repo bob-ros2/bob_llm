@@ -427,14 +427,13 @@ class LLMNode(Node):
                 # Handle directory of tools / skills
                 if os.path.isdir(path_str):
                     self.get_logger().info(
-                        f"Scanning directory for skills: {path_str}")
+                        f'Scanning directory for skills: {path_str}')
                     for f in os.listdir(path_str):
                         full_f_path = os.path.join(path_str, f)
-                        
+
                         # Identify potential tool modules
                         target_py = None
-                        module_name = ""
-                        
+                        module_name = ''
                         if f.endswith('.py') and os.path.isfile(full_f_path):
                             target_py = full_f_path
                             module_name = os.path.splitext(f)[0]
@@ -446,38 +445,38 @@ class LLMNode(Node):
                                     target_py = test_path
                                     module_name = f
                                     break
-                        
+
                         if target_py:
                             try:
                                 spec = importlib.util.spec_from_file_location(
                                     module_name, target_py)
                                 module = importlib.util.module_from_spec(spec)
                                 spec.loader.exec_module(module)
-                                
+
                                 # Register functions
                                 if (hasattr(module, 'register') and
                                         callable(getattr(module, 'register'))):
                                     tools = module.register(module, self)
                                 else:
                                     tools = default_register(module, self)
-                                
+
                                 for tool_def in tools:
                                     func_name = tool_def['function']['name']
                                     if hasattr(module, func_name):
                                         if func_name in all_functions:
                                             self.get_logger().error(
-                                                f"COLLISION: Tool '{func_name}' "
-                                                "already registered! Skipping "
-                                                f"from {module_name}.")
+                                                f'COLLISION: Tool \'{func_name}\' '
+                                                'already registered! Skipping '
+                                                f'from {module_name}.')
                                             continue
                                         all_functions[func_name] = getattr(module, func_name)
                                         all_tools.append(tool_def)
                                 self.get_logger().debug(
-                                    f"Loaded skill module: {module_name} "
-                                    f"from {target_py}")
+                                    f'Loaded skill module: {module_name} '
+                                    f'from {target_py}')
                             except Exception as e:
                                 self.get_logger().error(
-                                    f"Failed to load skill {module_name}: {e}")
+                                    f'Failed to load skill {module_name}: {e}')
                     continue
 
                 # Fallback: Check if the path is a standalone file
@@ -499,11 +498,11 @@ class LLMNode(Node):
                 if (hasattr(module, 'register') and
                         callable(getattr(module, 'register'))):
                     self.get_logger().info(
-                        f"Using custom 'register' from {path_str}")
+                        f'Using custom \'register\' from {path_str}')
                     tools = module.register(module, self)
                 else:
                     self.get_logger().info(
-                        f"Using default 'register' for {path_str}")
+                        f'Using default \'register\' for {path_str}')
                     tools = default_register(module, self)
 
                 # Map function names from the schema to the actual callable functions
@@ -512,9 +511,9 @@ class LLMNode(Node):
                     if hasattr(module, func_name):
                         if func_name in all_functions:
                             self.get_logger().error(
-                                f"COLLISION: Tool '{func_name}' "
-                                "already registered! Skipping "
-                                f"from {module_name}.")
+                                f'COLLISION: Tool \'{func_name}\' '
+                                'already registered! Skipping '
+                                f'from {module_name}.')
                             continue
                         all_functions[func_name] = getattr(module, func_name)
                         all_tools.append(tool_def)
@@ -769,8 +768,8 @@ class LLMNode(Node):
                             args_raw = tool_call['function']['arguments']
                             args = json.loads(args_raw)
                             self.get_logger().info(
-                                f"Calling tool '{func_name}' "
-                                f"with args: {args_raw}")
+                                f'Calling tool \'{func_name}\' '
+                                f'with args: {args_raw}')
 
                             # Publish tool call for visual feedback in chat clients
                             tool_info = {
