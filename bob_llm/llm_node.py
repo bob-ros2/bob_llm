@@ -465,7 +465,7 @@ class LLMNode(Node):
                                     if hasattr(module, func_name):
                                         if func_name in all_functions:
                                             self.get_logger().error(
-                                                f'COLLISION: Tool \'{func_name}\' '
+                                                f"COLLISION: Tool '{func_name}' "
                                                 'already registered! Skipping '
                                                 f'from {module_name}.')
                                             continue
@@ -498,11 +498,11 @@ class LLMNode(Node):
                 if (hasattr(module, 'register') and
                         callable(getattr(module, 'register'))):
                     self.get_logger().info(
-                        f'Using custom \'register\' from {path_str}')
+                        f"Using custom 'register' from {path_str}")
                     tools = module.register(module, self)
                 else:
                     self.get_logger().info(
-                        f'Using default \'register\' for {path_str}')
+                        f"Using default 'register' for {path_str}")
                     tools = default_register(module, self)
 
                 # Map function names from the schema to the actual callable functions
@@ -511,7 +511,7 @@ class LLMNode(Node):
                     if hasattr(module, func_name):
                         if func_name in all_functions:
                             self.get_logger().error(
-                                f'COLLISION: Tool \'{func_name}\' '
+                                f"COLLISION: Tool '{func_name}' "
                                 'already registered! Skipping '
                                 f'from {module_name}.')
                             continue
@@ -768,7 +768,7 @@ class LLMNode(Node):
                             args_raw = tool_call['function']['arguments']
                             args = json.loads(args_raw)
                             self.get_logger().info(
-                                f'Calling tool \'{func_name}\' '
+                                f"Calling tool '{func_name}' "
                                 f'with args: {args_raw}')
 
                             # Publish tool call for visual feedback in chat clients
