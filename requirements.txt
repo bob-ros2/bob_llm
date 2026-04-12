@@ -1,5 +1,3 @@
-httpx
-httpx-sse
 requests
 # When using qdrant_tools.py
 qdrant-client
