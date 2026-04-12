@@ -82,7 +82,7 @@ class BobChatClient(Node):
         self.waiting_for_response = False
         self.last_stream_time = 0.0
         self.last_ui_update_time = 0.0
-        self.ui_update_rate_limit = 0.05  # Max 20 FPS (1/0.05)
+        self.ui_update_rate_limit = 0.1  # Max 10 FPS (1/0.1)
 
     def _update_live_display(self, force=False):
         if not self.live:

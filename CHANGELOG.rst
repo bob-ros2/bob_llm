@@ -4,11 +4,13 @@ Changelog for package bob_llm
 
 1.0.3 (2026-04-13)
 ------------------
-* Optimized streaming latency by implementing raw byte stream parsing using a unified loop
-* Integrated tool call detection directly into reasoning stream to eliminate pre-check delay
-* Restored 100% flake8/PEP8 compliance for ROS 2 Rolling and Humble CI (enforced single quotes)
-* Refactored main interaction loop to ensure robust synchronous execution without ROS executor deadlocks
-* Fixed prompt input to handle JSON dictionaries without a role by wrapping them as user messages and improved log extraction
+* Definitive zero-latency SSE streaming parser using iter_lines for immediate delivery.
+* Fixed UTF-8 character encoding for special characters (ä, ö, ü) in raw byte streams.
+* Optimized chat UI refresh rate to improve human perception during streaming.
+* Integrated tool call detection directly into reasoning stream to eliminate pre-check delay.
+* Restored 100% flake8/PEP8 compliance (single quotes enforcement).
+* Refactored main interaction loop for robust synchronous execution.
+* Fixed JSON prompt handling and enhanced system prompt file support.
 * Added support for loading system_prompt from files and new system_prompt_file parameter
 * Implemented dynamic parameter reconfiguration for LLM client and system prompt
 * Added optional `eof` parameter to signal the end of a stream on `llm_stream`
