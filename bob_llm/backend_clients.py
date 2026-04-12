@@ -186,7 +186,10 @@ class OpenAICompatibleClient:
                 if chunk:
                     if self.logger:
                         self.logger.debug(f'RAW CHUNK RECEIVED: {len(chunk)} bytes')
-                    buffer += chunk.decode('utf-8', errors='replace')
+                    new_text = chunk.decode('utf-8', errors='replace')
+                    if self.logger:
+                        self.logger.debug(f'CHUNK TEXT: {repr(new_text)}')
+                    buffer += new_text
                     while '\n' in buffer:
                         line, buffer = buffer.split('\n', 1)
                         line = line.strip()
@@ -205,6 +208,9 @@ class OpenAICompatibleClient:
                                     if (content is not None or
                                             reasoning is not None or
                                             t_calls is not None):
+                                        if self.logger:
+                                            self.logger.debug(
+                                                f'YIELDING DELTA: c={repr(content)}, r={repr(reasoning)}')
                                         yield {
                                             'content': content,
                                             'reasoning': reasoning,
