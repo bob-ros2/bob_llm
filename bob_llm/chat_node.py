@@ -29,10 +29,11 @@ try:
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.styles import Style
     from rich.box import ROUNDED
-    from rich.console import Console
+    from rich.console import Console, Group
     from rich.live import Live
     from rich.markdown import Markdown
     from rich.panel import Panel
+    from rich.text import Text
 except ImportError:
     print('Error: Required libraries not found.')
     print('Please install them using:')
@@ -52,18 +53,24 @@ class BobChatClient(Node):
     ):
         super().__init__('bob_chat_client')
         self.panels = panels
-        self.pub_prompt = self.create_publisher(String, topic_in, 10)
+
+        # Declare queue_size parameter with environment variable fallback
+        default_queue_size = int(os.environ.get('CHAT_QUEUE_SIZE', '1000'))
+        self.declare_parameter('queue_size', default_queue_size)
+        queue_size = self.get_parameter('queue_size').value
+
+        self.pub_prompt = self.create_publisher(String, topic_in, queue_size)
         self.sub_stream = self.create_subscription(
-            String, topic_out, self.stream_callback, 10
+            String, topic_out, self.stream_callback, queue_size
         )
         self.sub_reasoning = self.create_subscription(
-            String, topic_reasoning, self.reasoning_callback, 10
+            String, topic_reasoning, self.reasoning_callback, queue_size
         )
         self.sub_response = self.create_subscription(
-            String, topic_response, self.response_callback, 10
+            String, topic_response, self.response_callback, queue_size
         )
         self.sub_tools = self.create_subscription(
-            String, topic_tools, self.tool_callback, 10
+            String, topic_tools, self.tool_callback, queue_size
         )
 
         self.console = Console()
@@ -79,28 +86,25 @@ class BobChatClient(Node):
         if not self.live:
             return
 
+        parts = []
         if self.panels:
-            content_renderable = Markdown(self.full_content) if self.full_content else ""
-            reasoning_renderable = Markdown(self.full_reasoning) if self.full_reasoning else ""
-
-            parts = []
             if self.full_reasoning:
-                parts.append(Panel(reasoning_renderable, title="Reasoning",
+                parts.append(Panel(Markdown(self.full_reasoning), title="Reasoning",
                                    border_style="dim", box=ROUNDED))
             if self.full_content:
-                parts.append(Panel(content_renderable, title="LLM",
+                parts.append(Panel(Markdown(self.full_content), title="LLM",
                                    border_style="blue", box=ROUNDED))
-
-            from rich.console import Group
-            self.live.update(Group(*parts), refresh=True)
         else:
-            # Simple text mode combines them with a separator if both are present
-            display_text = ""
             if self.full_reasoning:
-                display_text += f"[dim]REASONING:\n{self.full_reasoning}[/]\n\n"
+                parts.append(Text.from_markup("[dim]REASONING:[/]\n"))
+                parts.append(Markdown(self.full_reasoning))
+                parts.append(Text("\n"))
             if self.full_content:
-                display_text += f"[bold blue]LLM:[/]\n{self.full_content}"
-            self.live.update(Markdown(display_text), refresh=True)
+                parts.append(Text.from_markup("[bold blue]LLM:[/]\n"))
+                parts.append(Markdown(self.full_content))
+
+        if parts:
+            self.live.update(Group(*parts), refresh=True)
 
     def stream_callback(self, msg):
         self.last_stream_time = time.time()

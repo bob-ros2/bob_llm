@@ -68,8 +68,23 @@ ros2 run bob_llm chat --panels
 | :--- | :--- | :--- |
 | `--topic_in` | `llm_prompt` | ROS Topic to send prompts to. |
 | `--topic_out` | `llm_stream` | ROS Topic to receive streamed chunks. |
+| `--topic_reasoning` | `llm_reasoning` | ROS Topic to receive model reasoning content. |
+| `--topic_response` | `llm_response` | ROS Topic to receive final complete responses. |
 | `--topic_tools` | `llm_tool_calls` | Topic for skill execution feedback. |
 | `--panels` | `False` | Enable decorative boxes around messages. |
+
+#### Chat Configuration
+
+The chat client supports the following ROS parameters and environment variables:
+
+- **`queue_size` (Integer)**: ROS parameter to control the subscription queue depth. 
+- **`CHAT_QUEUE_SIZE` (Environment Variable)**: Default value for the `queue_size` parameter (default: `1000`).
+
+Example usage:
+```bash
+export CHAT_QUEUE_SIZE=2000
+ros2 run bob_llm chat --topic_in /user_query --topic_out /llm_stream --panels
+```
 
 #### Chat Example
 
