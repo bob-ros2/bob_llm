@@ -11,8 +11,8 @@ The `bob_llm` package provides a ROS 2 node (`llm node`) that acts as a powerful
 -   **Stateful Conversation:** Maintains chat history to provide conversational context to the LLM.
 -   **Dynamic Tool System:** Dynamically loads Python functions from user-provided files and makes them available to the LLM. The LLM can request to call these functions to perform actions or gather information.
 -   **Anthropic Agent Skills:** Full support for the [Anthropic Agent Skills](https://agentskills.io) specification, enabling modular, self-contained capabilities with documentation and execution logic.
--   **Streaming Support:** Can stream the LLM's final response token-by-token for real-time feedback.
--   **Reasoning/Thinking Support:** Real-time extraction and publishing of model reasoning (e.g., from Gemma 4 or DeepSeek) to a dedicated topic.
+-   **High Performance Streaming:** Optimized byte-stream parsing ensures zero-latency delivery of reasoning tokens and response chunks directly from the socket (no internal buffering).
+-   **Reasoning/Thinking Support:** Real-time extraction and publishing of model reasoning (e.g., from Gemma 2 or DeepSeek) to a dedicated topic.
 -   **Interactive Chat CLI:** Includes a premium terminal interface with Markdown rendering and multi-line support.
 -   **Multi-modality:** Supports multimodal input (e.g., images) via JSON prompts.
 -   **Lightweight:** The node core requires only standard Python libraries (`requests`, `rich`, `prompt_toolkit`).
