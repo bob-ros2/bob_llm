@@ -668,148 +668,156 @@ class LLMNode(Node):
                     return
 
                 tool_choice = self.get_parameter('tool_choice').value
-                success, response_message = self.llm_client.process_prompt(
-                    self.chat_history,
-                    self.tools if self.tools else None,
-                    tool_choice=tool_choice
-                )
+                
+                # If streaming is enabled, we use it even for tool detection to get reasoning ASAP
+                if stream_enabled:
+                    full_response = ''
+                    full_reasoning = ''
+                    tool_calls_chunks = {} # index -> {id, name, arguments_str}
 
-                if not success:
-                    self.get_logger().error(f'LLM request error: {response_message}')
-                    self.chat_history.pop()
-                    return
+                    async_stream = self.llm_client.process_prompt_stream(
+                        self.chat_history,
+                        tools=self.tools if self.tools else None,
+                        tool_choice=tool_choice
+                    )
 
-                if response_message.get('tool_calls'):
-                    if response_message.get('content') is None:
-                        response_message['content'] = ''
-                    self.chat_history.append(response_message)
-                    tool_call_count += 1
-                    for tool_call in response_message['tool_calls']:
+                    for chunk in async_stream:
                         if self._cancel_requested:
+                            self.pub_response.publish(String(data='[Cancelled]'))
                             return
+                        
+                        if isinstance(chunk, dict):
+                            content = chunk.get('content')
+                            reasoning = chunk.get('reasoning')
+                            t_calls = chunk.get('tool_calls') # We need to support this in client
 
-                        func_name = tool_call['function']['name']
-                        tool_call_id = tool_call['id']
-                        func_to_call = self.tool_functions.get(func_name)
+                            if reasoning is not None:
+                                full_reasoning += reasoning
+                                self.pub_reasoning.publish(String(data=reasoning))
+                            if content:
+                                full_response += content
+                                self.pub_stream.publish(String(data=content))
+                            
+                            if t_calls:
+                                for tc in t_calls:
+                                    idx = tc.get('index', 0)
+                                    if idx not in tool_calls_chunks:
+                                        tool_calls_chunks[idx] = {'id': '', 'name': '', 'args': ''}
+                                    if tc.get('id'): tool_calls_chunks[idx]['id'] += tc['id']
+                                    if tc.get('function'):
+                                        f = tc['function']
+                                        if f.get('name'): tool_calls_chunks[idx]['name'] += f['name']
+                                        if f.get('arguments'): tool_calls_chunks[idx]['args'] += f['arguments']
+                        
+                        elif isinstance(chunk, str):
+                            if chunk.startswith('[ERROR:'):
+                                self.get_logger().error(chunk)
+                            full_response += chunk
+                            self.pub_stream.publish(String(data=chunk))
 
-                        if not func_to_call:
-                            err = f"Tool '{func_name}' not found."
-                            self.get_logger().error(err)
-                            self.chat_history.append({
-                                'tool_call_id': tool_call_id, 'role': 'tool',
-                                'name': func_name, 'content': err})
-                            continue
+                    # Process collected tool calls if any
+                    if tool_calls_chunks:
+                        assistant_msg = {'role': 'assistant', 'content': full_response, 'tool_calls': []}
+                        if full_reasoning: assistant_msg['reasoning_content'] = full_reasoning
+                        
+                        for idx in sorted(tool_calls_chunks.keys()):
+                            tc = tool_calls_chunks[idx]
+                            assistant_msg['tool_calls'].append({
+                                'id': tc['id'],
+                                'type': 'function',
+                                'function': {'name': tc['name'], 'arguments': tc['args']}
+                            })
+                        
+                        self.chat_history.append(assistant_msg)
+                        tool_call_count += 1
+                        
+                        # Execute tools
+                        for tool_call in assistant_msg['tool_calls']:
+                            if self._cancel_requested: return
+                            func_name = tool_call['function']['name']
+                            tool_call_id = tool_call['id']
+                            func_to_call = self.tool_functions.get(func_name)
 
-                        try:
-                            args_raw = tool_call['function']['arguments']
-                            args = json.loads(args_raw)
-                            self.get_logger().info(
-                                f"Calling tool '{func_name}' with args: {args_raw}")
+                            if not func_to_call:
+                                err = f"Tool '{func_name}' not found."
+                                self.get_logger().error(err)
+                                self.chat_history.append({'tool_call_id': tool_call_id, 'role': 'tool', 'name': func_name, 'content': err})
+                                continue
 
-                            # Publish tool call for visual feedback in chat clients
-                            tool_info = {
-                                'name': func_name,
-                                'arguments': args_raw,
-                                'id': tool_call_id
-                            }
-                            self.pub_tool_calls.publish(String(data=json.dumps(tool_info)))
+                            try:
+                                args_raw = tool_call['function']['arguments']
+                                args = json.loads(args_raw)
+                                self.get_logger().info(f"Calling tool '{func_name}' with args: {args_raw}")
+                                self.pub_tool_calls.publish(String(data=json.dumps({'name': func_name, 'arguments': args_raw, 'id': tool_call_id})))
+                                result = func_to_call(**args)
+                                c_str = (result if isinstance(result, str) else json.dumps(result, ensure_ascii=False))
+                                self.chat_history.append({'tool_call_id': tool_call_id, 'role': 'tool', 'name': func_name, 'content': c_str})
+                            except Exception as e:
+                                self.get_logger().error(f'Tool {func_name} failed: {e}')
+                                self.chat_history.append({'tool_call_id': tool_call_id, 'role': 'tool', 'name': func_name, 'content': str(e)})
+                        continue # Go back to while loop to see if model wants more tools
+                    else:
+                        # No tool calls, finishing up
+                        eof_str = self.get_parameter('eof').value
+                        if eof_str: self.pub_stream.publish(String(data=eof_str))
+                        self.pub_response.publish(String(data=full_response))
+                        assistant_message = {'role': 'assistant', 'content': full_response}
+                        if full_reasoning: assistant_message['reasoning_content'] = full_reasoning
+                        self.chat_history.append(assistant_message)
+                        self._publish_latest_turn(prompt_text_for_log, assistant_message)
+                        break
 
-                            result = func_to_call(**args)
-
-                            c_str = (result if isinstance(result, str)
-                                     else json.dumps(result, ensure_ascii=False))
-
-                            # Log result preview for debugging
-                            res_preview = c_str[:500] + '...' if len(c_str) > 500 else c_str
-                            self.get_logger().debug(f"Tool '{func_name}' returned: {res_preview}")
-
-                            self.chat_history.append({
-                                'tool_call_id': tool_call_id, 'role': 'tool',
-                                'name': func_name, 'content': c_str})
-                        except Exception as e:
-                            self.get_logger().error(f'Tool {func_name} failed: {e}')
-                            self.chat_history.append({
-                                'tool_call_id': tool_call_id, 'role': 'tool',
-                                'name': func_name, 'content': str(e)})
-                    continue
                 else:
-                    break
+                    # Non-streaming mode (classic fallback)
+                    success, response_message = self.llm_client.process_prompt(
+                        self.chat_history,
+                        self.tools if self.tools else None,
+                        tool_choice=tool_choice
+                    )
+
+                    if not success:
+                        self.get_logger().error(f'LLM request error: {response_message}')
+                        self.chat_history.pop()
+                        return
+
+                    if response_message.get('tool_calls'):
+                        if response_message.get('content') is None: response_message['content'] = ''
+                        self.chat_history.append(response_message)
+                        tool_call_count += 1
+                        for tool_call in response_message['tool_calls']:
+                            if self._cancel_requested: return
+                            func_name = tool_call['function']['name']
+                            tool_call_id = tool_call['id']
+                            func_to_call = self.tool_functions.get(func_name)
+                            if not func_to_call:
+                                err = f"Tool '{func_name}' not found."
+                                self.get_logger().error(err)
+                                self.chat_history.append({'tool_call_id': tool_call_id, 'role': 'tool', 'name': func_name, 'content': err})
+                                continue
+                            try:
+                                args_raw = tool_call['function']['arguments']
+                                args = json.loads(args_raw)
+                                self.get_logger().info(f"Calling tool '{func_name}' with args: {args_raw}")
+                                tool_info = {'name': func_name, 'arguments': args_raw, 'id': tool_call_id}
+                                self.pub_tool_calls.publish(String(data=json.dumps(tool_info)))
+                                result = func_to_call(**args)
+                                c_str = (result if isinstance(result, str) else json.dumps(result, ensure_ascii=False))
+                                self.chat_history.append({'tool_call_id': tool_call_id, 'role': 'tool', 'name': func_name, 'content': c_str})
+                            except Exception as e:
+                                self.get_logger().error(f'Tool {func_name} failed: {e}')
+                                self.chat_history.append({'tool_call_id': tool_call_id, 'role': 'tool', 'name': func_name, 'content': str(e)})
+                        continue
+                    else:
+                        res_text = response_message.get('content', '')
+                        reasoning = (response_message.get('reasoning_content') or response_message.get('reasoning'))
+                        if reasoning is not None: self.pub_reasoning.publish(String(data=reasoning))
+                        if res_text: self.pub_response.publish(String(data=res_text))
+                        self.chat_history.append(response_message)
+                        self._publish_latest_turn(prompt_text_for_log, response_message)
+                        break
 
             if tool_call_count >= max_calls:
-                self.get_logger().warning(
-                    f'Max tool calls ({max_calls}) reached. Forcing final response.')
-                self.chat_history.append({
-                    'role': 'system',
-                    'content': (
-                        'Maximum tool calling limit reached. Please provide a '
-                        'final response based on the previous tool outputs.')
-                })
-
-            if self._cancel_requested:
-                return
-
-            if stream_enabled:
-                full_response = ''
-                full_reasoning = ''
-                tool_choice = self.get_parameter('tool_choice').value
-                for chunk in self.llm_client.process_prompt_stream(
-                    self.chat_history,
-                    tools=self.tools if self.tools else None,
-                    tool_choice=tool_choice
-                ):
-                    if self._cancel_requested:
-                        self.pub_response.publish(String(data='[Cancelled]'))
-                        return
-                    if isinstance(chunk, dict):
-                        content = chunk.get('content')
-                        reasoning = chunk.get('reasoning')
-                        if reasoning is not None:
-                            full_reasoning += reasoning
-                            self.pub_reasoning.publish(String(data=reasoning))
-                        if content:
-                            full_response += content
-                            self.pub_stream.publish(String(data=content))
-                        self.get_logger().debug(
-                            f"Stream chunk: content='{content}', "
-                            f"reasoning='{reasoning}'")
-                    elif isinstance(chunk, str):
-                        if chunk.startswith('[ERROR:'):
-                            self.get_logger().error(chunk)
-                        full_response += chunk
-                        self.pub_stream.publish(String(data=chunk))
-
-                eof_str = self.get_parameter('eof').value
-                if eof_str:
-                    self.pub_stream.publish(String(data=eof_str))
-
-                self.pub_response.publish(String(data=full_response))
-                assistant_message = {'role': 'assistant', 'content': full_response}
-                if full_reasoning:
-                    assistant_message['reasoning_content'] = full_reasoning
-                self.chat_history.append(assistant_message)
-                self._publish_latest_turn(prompt_text_for_log, assistant_message)
-            else:
-                tool_choice = self.get_parameter('tool_choice').value
-                success, final_message = self.llm_client.process_prompt(
-                    self.chat_history,
-                    tools=self.tools if self.tools else None,
-                    tool_choice=tool_choice
-                )
-                if self._cancel_requested:
-                    return
-                if success:
-                    res_text = final_message.get('content', '')
-                    reasoning = (final_message.get('reasoning_content') or
-                                 final_message.get('reasoning'))
-                    if reasoning is not None:
-                        self.pub_reasoning.publish(String(data=reasoning))
-                    if res_text:
-                        self.pub_response.publish(String(data=res_text))
-                    self.chat_history.append(final_message)
-                    self._publish_latest_turn(prompt_text_for_log, final_message)
-                else:
-                    self.get_logger().error(f'Failed response: {final_message}')
-                    self.pub_response.publish(String(data='Error generating response.'))
+                self.get_logger().warning(f'Max tool calls ({max_calls}) reached.')
         finally:
             self._is_generating = False
 

@@ -201,8 +201,9 @@ class OpenAICompatibleClient:
                                     content = delta.get('content')
                                     reasoning = (delta.get('reasoning_content') or
                                                  delta.get('reasoning'))
-                                    if content is not None or reasoning is not None:
-                                        yield {'content': content, 'reasoning': reasoning}
+                                    t_calls = delta.get('tool_calls')
+                                    if content is not None or reasoning is not None or t_calls is not None:
+                                        yield {'content': content, 'reasoning': reasoning, 'tool_calls': t_calls}
                             except json.JSONDecodeError:
                                 continue
 
