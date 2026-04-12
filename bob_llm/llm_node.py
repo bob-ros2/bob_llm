@@ -407,7 +407,7 @@ class LLMNode(Node):
         else:
             self.get_logger().error(f'Unsupported API type: {api_type}')
 
-    def _load_tools(self) -> (list, dict):
+    def _load_tools(self) -> tuple:
         """
         Dynamically load tool modules specified in 'tool_interfaces'.
 
@@ -698,7 +698,7 @@ class LLMNode(Node):
                                 full_reasoning += reasoning
                                 self.pub_reasoning.publish(
                                     String(data=reasoning))
-                            if content:
+                            if content is not None:
                                 full_response += content
                                 self.pub_stream.publish(String(data=content))
 
