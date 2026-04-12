@@ -13,10 +13,9 @@
 # limitations under the License.
 
 import json
+from typing import Tuple
 
 import requests
-
-from typing import Tuple
 
 
 class OpenAICompatibleClient:
