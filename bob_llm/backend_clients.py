@@ -180,42 +180,40 @@ class OpenAICompatibleClient:
             )
             response.raise_for_status()
 
-            # Ultra-raw byte-by-byte parsing to ensure zero buffering
-            buffer = ''
-            for chunk in response.iter_content(chunk_size=1):
-                if not chunk:
+            # Standard SSE line-by-line processing (each line is typically one token)
+            for line in response.iter_lines(delimiter=b'\n'):
+                if not line:
                     continue
 
-                char = chunk.decode('utf-8', errors='replace')
-                if char == '\n':
-                    line = buffer.strip()
-                    buffer = ''
+                # Strip and decode the full line to ensure UTF-8 integrity
+                line_str = line.decode('utf-8', errors='replace').strip()
 
-                    if line.startswith('data: '):
-                        data_str = line[6:].strip()
-                        if data_str == '[DONE]':
-                            return
-                        try:
-                            data_json = json.loads(data_str)
-                            if 'choices' in data_json and len(data_json['choices']) > 0:
-                                delta = data_json['choices'][0].get('delta', {})
-                                content = delta.get('content')
-                                reasoning = (delta.get('reasoning_content') or
-                                             delta.get('reasoning'))
-                                t_calls = delta.get('tool_calls')
+                if line_str.startswith('data: '):
+                    data_str = line_str[6:].strip()
+                    if data_str == '[DONE]':
+                        return
+                    try:
+                        data_json = json.loads(data_str)
+                        if 'choices' in data_json and len(data_json['choices']) > 0:
+                            delta = data_json['choices'][0].get('delta', {})
+                            content = delta.get('content')
+                            reasoning = (delta.get('reasoning_content') or
+                                         delta.get('reasoning'))
+                            t_calls = delta.get('tool_calls')
 
-                                if (content is not None or
-                                        reasoning is not None or
-                                        t_calls is not None):
-                                    yield {
-                                        'content': content,
-                                        'reasoning': reasoning,
-                                        'tool_calls': t_calls
-                                    }
-                        except json.JSONDecodeError:
-                            continue
-                else:
-                    buffer += char
+                            if (content is not None or
+                                    reasoning is not None or
+                                    t_calls is not None):
+                                if self.logger:
+                                    self.logger.debug(
+                                        f'YIELDING: c={repr(content)}, r={repr(reasoning)}')
+                                yield {
+                                    'content': content,
+                                    'reasoning': reasoning,
+                                    'tool_calls': t_calls
+                                }
+                    except json.JSONDecodeError:
+                        continue
 
         except requests.exceptions.RequestException as e:
             error_msg = f'API stream request failed: {e}'
