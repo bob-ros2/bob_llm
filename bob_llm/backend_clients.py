@@ -15,7 +15,8 @@
 import json
 from typing import Tuple
 
-import requests
+import httpx
+from httpx_sse import connect_sse
 
 
 class OpenAICompatibleClient:
@@ -134,7 +135,7 @@ class OpenAICompatibleClient:
 
         return payload
 
-    def process_prompt(
+    async def process_prompt(
         self,
         history: list,
         tools: list = None,
@@ -152,25 +153,26 @@ class OpenAICompatibleClient:
             history, tools=tools, tool_choice=tool_choice, stream=False)
 
         try:
-            response = requests.post(
-                self.api_url,
-                headers=self.headers,
-                json=payload,
-                timeout=self.timeout
-            )
-            response.raise_for_status()
-            message = response.json()['choices'][0]['message']
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self.api_url,
+                    headers=self.headers,
+                    json=payload,
+                    timeout=self.timeout
+                )
+                response.raise_for_status()
+                message = response.json()['choices'][0]['message']
 
-            # Return message dictionary for text and tool calls.
-            return True, message
+                # Return message dictionary for text and tool calls.
+                return True, message
 
-        except requests.exceptions.RequestException as e:
+        except httpx.HTTPError as e:
             error_msg = f'API request failed: {e}'
             if self.logger:
                 self.logger.error(error_msg)
             return False, {'role': 'assistant', 'content': error_msg}
 
-    def process_prompt_stream(
+    async def process_prompt_stream(
         self,
         history: list,
         tools: list = None,
@@ -188,24 +190,15 @@ class OpenAICompatibleClient:
             history, tools=tools, tool_choice=tool_choice, stream=True)
 
         try:
-            response = requests.post(
-                self.api_url,
-                headers=self.headers,
-                json=payload,
-                timeout=self.timeout,
-                stream=True
-            )
-            response.raise_for_status()
-
-            for line in response.iter_lines(chunk_size=1):
-                if line:
-                    line_str = line.decode('utf-8')
-                    if line_str.startswith('data: '):
-                        json_str = line_str[6:].strip()
-                        if not json_str or json_str == '[DONE]':
+            async with httpx.AsyncClient() as client:
+                async with connect_sse(client, "POST", self.api_url,
+                                       headers=self.headers, json=payload,
+                                       timeout=self.timeout) as event_source:
+                    async for event in event_source.aiter_sse():
+                        if event.data == '[DONE]':
                             break
                         try:
-                            chunk = json.loads(json_str)
+                            chunk = json.loads(event.data)
                             if 'choices' in chunk and len(chunk['choices']) > 0:
                                 delta = chunk['choices'][0].get('delta', {})
                                 content = delta.get('content')
@@ -216,8 +209,8 @@ class OpenAICompatibleClient:
                         except json.JSONDecodeError as e:
                             if self.logger:
                                 self.logger.warning(
-                                    f'Failed to decode stream chunk: {json_str}. Error: {e}')
-        except requests.exceptions.RequestException as e:
+                                    f'Failed to decode SSE data: {event.data}. Error: {e}')
+        except httpx.HTTPError as e:
             error_msg = f'API stream request failed: {e}'
             if self.logger:
                 self.logger.error(error_msg)

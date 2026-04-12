@@ -31,6 +31,7 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.logging import LoggingSeverity
 from rclpy.node import Node
+import httpx
 import requests
 from std_msgs.msg import String
 
@@ -553,7 +554,7 @@ class LLMNode(Node):
         self.get_logger().debug(
             f'History: {str(self._get_truncated_history())}')
 
-    def prompt_callback(self, msg):
+    async def prompt_callback(self, msg):
         """Process an incoming prompt from the 'llm_prompt' topic."""
         # --- Cancellation Check ---
         stop_list = self.get_parameter('stop').value
@@ -628,13 +629,14 @@ class LLMNode(Node):
                                         image_file.read()).decode('utf-8')
                                     image_data = f'data:{mime_type};base64,{b64}'
                             elif image_url.startswith('http'):
-                                response = requests.get(image_url, timeout=10.0)
-                                response.raise_for_status()
-                                m_t = response.headers.get(
-                                    'Content-Type', 'image/jpeg')
-                                b64 = base64.b64encode(
-                                    response.content).decode('utf-8')
-                                image_data = f'data:{m_t};base64,{b64}'
+                                async with httpx.AsyncClient() as client:
+                                    response = await client.get(image_url, timeout=10.0)
+                                    response.raise_for_status()
+                                    m_t = response.headers.get(
+                                        'Content-Type', 'image/jpeg')
+                                    b64 = base64.b64encode(
+                                        response.content).decode('utf-8')
+                                    image_data = f'data:{m_t};base64,{b64}'
 
                             if image_data:
                                 user_content = {
@@ -667,7 +669,7 @@ class LLMNode(Node):
                     return
 
                 tool_choice = self.get_parameter('tool_choice').value
-                success, response_message = self.llm_client.process_prompt(
+                success, response_message = await self.llm_client.process_prompt(
                     self.chat_history,
                     self.tools if self.tools else None,
                     tool_choice=tool_choice
@@ -751,7 +753,7 @@ class LLMNode(Node):
                 full_response = ''
                 full_reasoning = ''
                 tool_choice = self.get_parameter('tool_choice').value
-                for chunk in self.llm_client.process_prompt_stream(
+                async for chunk in self.llm_client.process_prompt_stream(
                     self.chat_history,
                     tools=self.tools if self.tools else None,
                     tool_choice=tool_choice
@@ -789,7 +791,7 @@ class LLMNode(Node):
                 self._publish_latest_turn(prompt_text_for_log, assistant_message)
             else:
                 tool_choice = self.get_parameter('tool_choice').value
-                success, final_message = self.llm_client.process_prompt(
+                success, final_message = await self.llm_client.process_prompt(
                     self.chat_history,
                     tools=self.tools if self.tools else None,
                     tool_choice=tool_choice
@@ -812,7 +814,7 @@ class LLMNode(Node):
         finally:
             self._is_generating = False
 
-    def _process_queue_callback(self):
+    async def _process_queue_callback(self):
         """Timer callback to process queued prompts."""
         if self._is_generating:
             return
@@ -824,7 +826,7 @@ class LLMNode(Node):
         prompt_data = self._prompt_queue.popleft()
         msg = String()
         msg.data = prompt_data
-        self.prompt_callback(msg)
+        await self.prompt_callback(msg)
 
     def on_params_changed(self, params):
         """Handle parameter changes at runtime."""
