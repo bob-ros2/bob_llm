@@ -47,6 +47,7 @@ class BobChatClient(Node):
         topic_out='llm_stream',
         topic_response='llm_response',
         topic_tools='llm_tool_calls',
+        topic_reasoning='llm_reasoning',
         panels=False
     ):
         super().__init__('bob_chat_client')
@@ -54,6 +55,9 @@ class BobChatClient(Node):
         self.pub_prompt = self.create_publisher(String, topic_in, 10)
         self.sub_stream = self.create_subscription(
             String, topic_out, self.stream_callback, 10
+        )
+        self.sub_reasoning = self.create_subscription(
+            String, topic_reasoning, self.reasoning_callback, 10
         )
         self.sub_response = self.create_subscription(
             String, topic_response, self.response_callback, 10
@@ -65,9 +69,38 @@ class BobChatClient(Node):
         self.console = Console()
         self.live = None
         self.full_content = ''
+        self.full_reasoning = ''
         self.is_receiving = False
+        self.is_reasoning = False
         self.waiting_for_response = False
         self.last_stream_time = 0.0
+
+    def _update_live_display(self):
+        if not self.live:
+            return
+
+        if self.panels:
+            content_renderable = Markdown(self.full_content) if self.full_content else ""
+            reasoning_renderable = Markdown(self.full_reasoning) if self.full_reasoning else ""
+
+            parts = []
+            if self.full_reasoning:
+                parts.append(Panel(reasoning_renderable, title="Reasoning",
+                                   border_style="dim", box=ROUNDED))
+            if self.full_content:
+                parts.append(Panel(content_renderable, title="LLM",
+                                   border_style="blue", box=ROUNDED))
+
+            from rich.console import Group
+            self.live.update(Group(*parts), refresh=True)
+        else:
+            # Simple text mode combines them with a separator if both are present
+            display_text = ""
+            if self.full_reasoning:
+                display_text += f"[dim]REASONING:\n{self.full_reasoning}[/]\n\n"
+            if self.full_content:
+                display_text += f"[bold blue]LLM:[/]\n{self.full_content}"
+            self.live.update(Markdown(display_text), refresh=True)
 
     def stream_callback(self, msg):
         self.last_stream_time = time.time()
@@ -75,49 +108,46 @@ class BobChatClient(Node):
         if not self.is_receiving:
             self.full_content = ''
             self.is_receiving = True
-            if self.panels:
+            if not self.live:
                 self.live = Live(
-                    Panel(
-                        Markdown(''),
-                        title='LLM',
-                        border_style='blue',
-                        box=ROUNDED
-                    ),
+                    Markdown(''),
                     console=self.console,
                     auto_refresh=False,
                     vertical_overflow='visible'
                 )
-            else:
-                self.console.print('\n[bold blue]LLM:[/]')
+                self.live.start()
+
+        self.full_content += chunk
+        self._update_live_display()
+
+    def reasoning_callback(self, msg):
+        self.last_stream_time = time.time()
+        chunk = msg.data
+        if not self.is_reasoning:
+            self.full_reasoning = ''
+            self.is_reasoning = True
+            if not self.live:
                 self.live = Live(
                     Markdown(''),
                     console=self.console,
-                    auto_refresh=False
+                    auto_refresh=False,
+                    vertical_overflow='visible'
                 )
-            self.live.start()
+                self.live.start()
 
-        self.full_content += chunk
-        if self.panels:
-            self.live.update(
-                Panel(
-                    Markdown(self.full_content),
-                    title='LLM',
-                    border_style='blue',
-                    box=ROUNDED
-                ),
-                refresh=True
-            )
-        else:
-            self.live.update(Markdown(self.full_content), refresh=True)
+        self.full_reasoning += chunk
+        self._update_live_display()
 
     def response_callback(self, msg):
         # We don't read the full msg.data here since we streamed it already,
         # but you could if streaming was disabled.
         # This acts as a clear end signal.
-        if self.is_receiving:
+        if self.is_receiving or self.is_reasoning:
             if self.live:
                 self.live.stop()
+                self.live = None
             self.is_receiving = False
+            self.is_reasoning = False
             self.console.print('')
         self.waiting_for_response = False
 
@@ -169,6 +199,10 @@ def main(args=None):
         help='ROS Topic to receive tool call notifications'
     )
     parser.add_argument(
+        '--topic_reasoning', default='llm_reasoning',
+        help='ROS Topic to receive model reasoning content'
+    )
+    parser.add_argument(
         '--panels', action='store_true',
         help='Enable premium boxed UI (default: off)'
     )
@@ -180,6 +214,7 @@ def main(args=None):
         topic_out=parsed_args.topic_out,
         topic_response=parsed_args.topic_response,
         topic_tools=parsed_args.topic_tools,
+        topic_reasoning=parsed_args.topic_reasoning,
         panels=parsed_args.panels
     )
 
