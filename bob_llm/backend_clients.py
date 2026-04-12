@@ -180,19 +180,19 @@ class OpenAICompatibleClient:
             )
             response.raise_for_status()
 
-            buffer = ""
+            buffer = ''
             # Using iter_content with None/small size to get data as soon as it hits the socket
             for chunk in response.iter_content(chunk_size=None):
                 if chunk:
                     if self.logger:
-                        self.logger.debug(f"RAW CHUNK RECEIVED: {len(chunk)} bytes")
+                        self.logger.debug(f'RAW CHUNK RECEIVED: {len(chunk)} bytes')
                     buffer += chunk.decode('utf-8', errors='replace')
-                    while "\n" in buffer:
-                        line, buffer = buffer.split("\n", 1)
+                    while '\n' in buffer:
+                        line, buffer = buffer.split('\n', 1)
                         line = line.strip()
-                        if line.startswith("data: "):
+                        if line.startswith('data: '):
                             data_str = line[6:].strip()
-                            if data_str == "[DONE]":
+                            if data_str == '[DONE]':
                                 return
                             try:
                                 data_json = json.loads(data_str)

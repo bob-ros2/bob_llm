@@ -773,7 +773,7 @@ class LLMNode(Node):
                                 args = json.loads(args_raw)
                                 self.get_logger().info(
                                     f"Calling tool '{func_name}' with args: "
-                                    f"{args_raw}")
+                                    f'{args_raw}')
                                 self.pub_tool_calls.publish(String(data=json.dumps({
                                     'name': func_name,
                                     'arguments': args_raw,
@@ -856,7 +856,7 @@ class LLMNode(Node):
                                 args = json.loads(args_raw)
                                 self.get_logger().info(
                                     f"Calling tool '{func_name}' with args: "
-                                    f"{args_raw}")
+                                    f'{args_raw}')
                                 tool_info = {
                                     'name': func_name,
                                     'arguments': args_raw,

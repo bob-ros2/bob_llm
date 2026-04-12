@@ -98,18 +98,18 @@ class BobChatClient(Node):
         parts = []
         if self.panels:
             if self.full_reasoning:
-                parts.append(Panel(Markdown(self.full_reasoning), title="Reasoning",
-                                   border_style="dim", box=ROUNDED))
+                parts.append(Panel(Markdown(self.full_reasoning), title='Reasoning',
+                                   border_style='dim', box=ROUNDED))
             if self.full_content:
-                parts.append(Panel(Markdown(self.full_content), title="LLM",
-                                   border_style="blue", box=ROUNDED))
+                parts.append(Panel(Markdown(self.full_content), title='LLM',
+                                   border_style='blue', box=ROUNDED))
         else:
             if self.full_reasoning:
-                parts.append(Text.from_markup("[dim]REASONING:[/]\n"))
+                parts.append(Text.from_markup('[dim]REASONING:[/]\n'))
                 parts.append(Markdown(self.full_reasoning))
-                parts.append(Text("\n"))
+                parts.append(Text('\n'))
             if self.full_content:
-                parts.append(Text.from_markup("[bold blue]LLM:[/]\n"))
+                parts.append(Text.from_markup('[bold blue]LLM:[/]\n'))
                 parts.append(Markdown(self.full_content))
 
         if parts:
