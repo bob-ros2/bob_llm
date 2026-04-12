@@ -184,6 +184,8 @@ class OpenAICompatibleClient:
             # Using iter_content with None/small size to get data as soon as it hits the socket
             for chunk in response.iter_content(chunk_size=None):
                 if chunk:
+                    if self.logger:
+                        self.logger.debug(f"RAW CHUNK RECEIVED: {len(chunk)} bytes")
                     buffer += chunk.decode('utf-8', errors='replace')
                     while "\n" in buffer:
                         line, buffer = buffer.split("\n", 1)
