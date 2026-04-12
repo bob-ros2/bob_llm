@@ -762,12 +762,15 @@ class LLMNode(Node):
                     if isinstance(chunk, dict):
                         content = chunk.get('content')
                         reasoning = chunk.get('reasoning')
-                        if reasoning:
+                        if reasoning is not None:
                             full_reasoning += reasoning
                             self.pub_reasoning.publish(String(data=reasoning))
                         if content:
                             full_response += content
                             self.pub_stream.publish(String(data=content))
+                        self.get_logger().debug(
+                            f"Stream chunk: content='{content}', "
+                            f"reasoning='{reasoning}'")
                     elif isinstance(chunk, str):
                         if chunk.startswith('[ERROR:'):
                             self.get_logger().error(chunk)
@@ -797,7 +800,7 @@ class LLMNode(Node):
                     res_text = final_message.get('content', '')
                     reasoning = (final_message.get('reasoning_content') or
                                  final_message.get('reasoning'))
-                    if reasoning:
+                    if reasoning is not None:
                         self.pub_reasoning.publish(String(data=reasoning))
                     if res_text:
                         self.pub_response.publish(String(data=res_text))
