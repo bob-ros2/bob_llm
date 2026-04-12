@@ -93,6 +93,7 @@ def publish_topic_message(topic_name: str, message_type: str, message_yaml: str)
     r"""
     Publish a message to a ROS 2 topic.
 
+    MANDATORY: Use 'list_topics' first. NEVER invent topic names.
     Example: publish_topic_message('/chatter', 'std_msgs/msg/String', 'data: \'hello\'')
     """
     return _run_ros_command([
@@ -124,9 +125,9 @@ def call_service(service_name: str, service_type: str, request_yaml: str) -> str
     """
     Call a ROS 2 service.
 
-    :param service_name: The name of the service to call.
-    :param service_type: The type of the service.
-    :param request_yaml: The service request encoded in YAML.
+    MANDATORY: You MUST only call services that you have previously discovered
+    using 'list_services'. NEVER invent or assume service names (e.g., '/system/sleep')
+    even if they seem standard.
     """
     return _run_ros_command(['ros2', 'service', 'call', service_name, service_type, request_yaml])
 
@@ -135,7 +136,8 @@ def get_parameter(node_name: str, param_name: str) -> str:
     """
     Get the value of a parameter from a ROS 2 node.
 
-    If the node is this LLM node, it queries the node directly for the latest value.
+    MANDATORY: Use 'list_parameters' first to ensure the parameter exists.
+    DO NOT guess parameter names.
     """
     if _NodeContext.node and _NodeContext.node.get_fully_qualified_name() == node_name:
         param = _NodeContext.node.get_parameter(param_name)
