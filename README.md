@@ -12,6 +12,7 @@ The `bob_llm` package provides a ROS 2 node (`llm node`) that acts as a powerful
 -   **Dynamic Tool System:** Dynamically loads Python functions from user-provided files and makes them available to the LLM. The LLM can request to call these functions to perform actions or gather information.
 -   **Anthropic Agent Skills:** Full support for the [Anthropic Agent Skills](https://agentskills.io) specification, enabling modular, self-contained capabilities with documentation and execution logic.
 -   **Streaming Support:** Can stream the LLM's final response token-by-token for real-time feedback.
+-   **Reasoning/Thinking Support:** Real-time extraction and publishing of model reasoning (e.g., from Gemma 4 or DeepSeek) to a dedicated topic.
 -   **Interactive Chat CLI:** Includes a premium terminal interface with Markdown rendering and multi-line support.
 -   **Multi-modality:** Supports multimodal input (e.g., images) via JSON prompts.
 -   **Lightweight:** The node core requires only standard Python libraries (`requests`, `rich`, `prompt_toolkit`).
@@ -107,6 +108,7 @@ ros2 topic pub /llm_prompt std_msgs/msg/String "data: '{\"role\": \"user\", \"co
 | `/llm_prompt` | `std_msgs/msg/String` | **(Subscribed)** Receives user prompts. |
 | `/llm_response` | `std_msgs/msg/String` | **(Published)** Final, complete response from the LLM. |
 | `/llm_stream` | `std_msgs/msg/String` | **(Published)** token-by-token chunks of the response. |
+| `/llm_reasoning` | `std_msgs/msg/String` | **(Published)** Live reasoning/thinking content from the model. |
 | `/llm_tool_calls` | `std_msgs/msg/String` | **(Published)** JSON info about tool execution for clients. |
 | `/llm_latest_turn`| `std_msgs/msg/String` | **(Published)** Latest turn as JSON array of messages. |
 

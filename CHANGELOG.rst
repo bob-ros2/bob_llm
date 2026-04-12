@@ -16,6 +16,10 @@ Changelog for package bob_llm
 * Refactored Agent Skills implementation to strictly follow progressive disclosure
 * Fixed Race Condition in LLMNode initialization by pre-initializing llm_client
 * Implemented soft limit for tool calls with system hint for final response
+* Added `llm_reasoning` topic to support live reasoning/thinking content from models (e.g., Gemma 2, DeepSeek)
+* Updated `OpenAICompatibleClient` to extract `reasoning_content` from both stream chunks and blocking responses
+* Enhanced tool safety in `ros_cli_tools.py` by enforcing mandatory discovery of topics, services, and parameters in docstrings
+* Improved type safety in `backend_clients` with proper Tuple annotations and fixed linter issues
 * Added premium interactive terminal chat client with Markdown and optional boxed UI
 * Cleaned up legacy scripts and modernized README documentation
 
