@@ -16,6 +16,8 @@ import json
 
 import requests
 
+from typing import Tuple
+
 
 class OpenAICompatibleClient:
     """Client for OpenAI-compatible APIs."""
@@ -138,7 +140,7 @@ class OpenAICompatibleClient:
         history: list,
         tools: list = None,
         tool_choice: str = 'auto'
-    ) -> (bool, dict):
+    ) -> Tuple[bool, dict]:
         """
         Send a blocking prompt request to the LLM.
 
@@ -207,8 +209,11 @@ class OpenAICompatibleClient:
                             chunk = json.loads(json_str)
                             if 'choices' in chunk and len(chunk['choices']) > 0:
                                 delta = chunk['choices'][0].get('delta', {})
-                                if 'content' in delta and delta['content']:
-                                    yield delta['content']
+                                content = delta.get('content')
+                                reasoning = (delta.get('reasoning_content') or
+                                             delta.get('reasoning'))
+                                if content or reasoning:
+                                    yield {'content': content, 'reasoning': reasoning}
                         except json.JSONDecodeError as e:
                             if self.logger:
                                 self.logger.warning(

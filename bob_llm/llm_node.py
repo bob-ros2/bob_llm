@@ -301,6 +301,9 @@ class LLMNode(Node):
         self.pub_stream = self.create_publisher(
             String, 'llm_stream', DEFAULT_QUEUE_SIZE)
 
+        self.pub_reasoning = self.create_publisher(
+            String, 'llm_reasoning', DEFAULT_QUEUE_SIZE)
+
         self.pub_latest_turn = self.create_publisher(
             String, 'llm_latest_turn', DEFAULT_QUEUE_SIZE)
         self.pub_tool_calls = self.create_publisher(
@@ -746,6 +749,7 @@ class LLMNode(Node):
 
             if stream_enabled:
                 full_response = ''
+                full_reasoning = ''
                 tool_choice = self.get_parameter('tool_choice').value
                 for chunk in self.llm_client.process_prompt_stream(
                     self.chat_history,
@@ -755,7 +759,18 @@ class LLMNode(Node):
                     if self._cancel_requested:
                         self.pub_response.publish(String(data='[Cancelled]'))
                         return
-                    if chunk:
+                    if isinstance(chunk, dict):
+                        content = chunk.get('content')
+                        reasoning = chunk.get('reasoning')
+                        if reasoning:
+                            full_reasoning += reasoning
+                            self.pub_reasoning.publish(String(data=reasoning))
+                        if content:
+                            full_response += content
+                            self.pub_stream.publish(String(data=content))
+                    elif isinstance(chunk, str):
+                        if chunk.startswith('[ERROR:'):
+                            self.get_logger().error(chunk)
                         full_response += chunk
                         self.pub_stream.publish(String(data=chunk))
 
@@ -765,6 +780,8 @@ class LLMNode(Node):
 
                 self.pub_response.publish(String(data=full_response))
                 assistant_message = {'role': 'assistant', 'content': full_response}
+                if full_reasoning:
+                    assistant_message['reasoning_content'] = full_reasoning
                 self.chat_history.append(assistant_message)
                 self._publish_latest_turn(prompt_text_for_log, assistant_message)
             else:
@@ -776,9 +793,14 @@ class LLMNode(Node):
                 )
                 if self._cancel_requested:
                     return
-                if success and final_message.get('content'):
-                    res_text = final_message['content']
-                    self.pub_response.publish(String(data=res_text))
+                if success:
+                    res_text = final_message.get('content', '')
+                    reasoning = (final_message.get('reasoning_content') or
+                                 final_message.get('reasoning'))
+                    if reasoning:
+                        self.pub_reasoning.publish(String(data=reasoning))
+                    if res_text:
+                        self.pub_response.publish(String(data=res_text))
                     self.chat_history.append(final_message)
                     self._publish_latest_turn(prompt_text_for_log, final_message)
                 else:
