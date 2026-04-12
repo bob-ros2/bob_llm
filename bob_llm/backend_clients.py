@@ -15,8 +15,7 @@
 import json
 from typing import Tuple
 
-import httpx
-from httpx_sse import connect_sse
+import requests
 
 
 class OpenAICompatibleClient:
@@ -135,82 +134,77 @@ class OpenAICompatibleClient:
 
         return payload
 
-    async def process_prompt(
+    def process_prompt(
         self,
         history: list,
         tools: list = None,
         tool_choice: str = 'auto'
     ) -> Tuple[bool, dict]:
-        """
-        Send a blocking prompt request to the LLM.
-
-        :param history: The list of messages in the chat history.
-        :param tools: An optional list of tool definitions.
-        :param tool_choice: The choice for tool calling.
-        :return: A tuple (success, message_dict).
-        """
+        """Send a prompt to the LLM and wait for the full response."""
         payload = self._build_payload(
             history, tools=tools, tool_choice=tool_choice, stream=False)
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    self.api_url,
-                    headers=self.headers,
-                    json=payload,
-                    timeout=self.timeout
-                )
-                response.raise_for_status()
-                message = response.json()['choices'][0]['message']
-
-                # Return message dictionary for text and tool calls.
-                return True, message
-
-        except httpx.HTTPError as e:
+            response = requests.post(
+                self.api_url,
+                headers=self.headers,
+                json=payload,
+                timeout=self.timeout
+            )
+            response.raise_for_status()
+            message = response.json()['choices'][0]['message']
+            return True, message
+        except requests.exceptions.RequestException as e:
             error_msg = f'API request failed: {e}'
             if self.logger:
                 self.logger.error(error_msg)
             return False, {'role': 'assistant', 'content': error_msg}
 
-    async def process_prompt_stream(
+    def process_prompt_stream(
         self,
         history: list,
         tools: list = None,
         tool_choice: str = 'auto'
     ):
-        """
-        Send a streaming prompt request to the LLM.
-
-        :param history: The list of messages in the chat history.
-        :param tools: An optional list of tool definitions.
-        :param tool_choice: The choice for tool calling.
-        :yield: Chunks of the response string or error messages.
-        """
+        """Send a prompt and stream response tokens using zero-buffering manual parsing."""
         payload = self._build_payload(
             history, tools=tools, tool_choice=tool_choice, stream=True)
 
         try:
-            async with httpx.AsyncClient() as client:
-                async with connect_sse(client, "POST", self.api_url,
-                                       headers=self.headers, json=payload,
-                                       timeout=self.timeout) as event_source:
-                    async for event in event_source.aiter_sse():
-                        if event.data == '[DONE]':
-                            break
-                        try:
-                            chunk = json.loads(event.data)
-                            if 'choices' in chunk and len(chunk['choices']) > 0:
-                                delta = chunk['choices'][0].get('delta', {})
-                                content = delta.get('content')
-                                reasoning = (delta.get('reasoning_content') or
-                                             delta.get('reasoning'))
-                                if content is not None or reasoning is not None:
-                                    yield {'content': content, 'reasoning': reasoning}
-                        except json.JSONDecodeError as e:
-                            if self.logger:
-                                self.logger.warning(
-                                    f'Failed to decode SSE data: {event.data}. Error: {e}')
-        except httpx.HTTPError as e:
+            response = requests.post(
+                self.api_url,
+                headers=self.headers,
+                json=payload,
+                timeout=self.timeout,
+                stream=True
+            )
+            response.raise_for_status()
+
+            buffer = ""
+            # Using iter_content with None/small size to get data as soon as it hits the socket
+            for chunk in response.iter_content(chunk_size=None):
+                if chunk:
+                    buffer += chunk.decode('utf-8', errors='replace')
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.strip()
+                        if line.startswith("data: "):
+                            data_str = line[6:].strip()
+                            if data_str == "[DONE]":
+                                return
+                            try:
+                                data_json = json.loads(data_str)
+                                if 'choices' in data_json and len(data_json['choices']) > 0:
+                                    delta = data_json['choices'][0].get('delta', {})
+                                    content = delta.get('content')
+                                    reasoning = (delta.get('reasoning_content') or
+                                                 delta.get('reasoning'))
+                                    if content is not None or reasoning is not None:
+                                        yield {'content': content, 'reasoning': reasoning}
+                            except json.JSONDecodeError:
+                                continue
+
+        except requests.exceptions.RequestException as e:
             error_msg = f'API stream request failed: {e}'
             if self.logger:
                 self.logger.error(error_msg)
