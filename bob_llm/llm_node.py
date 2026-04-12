@@ -31,7 +31,6 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.logging import LoggingSeverity
 from rclpy.node import Node
-import httpx
 import requests
 from std_msgs.msg import String
 
@@ -641,8 +640,10 @@ class LLMNode(Node):
                                 user_content = {
                                     'role': 'user',
                                     'content': [
-                                        {'type': 'text', 'text': json_data.get('content', '')},
-                                        {'type': 'image_url', 'image_url': {'url': image_data}}
+                                        {'type': 'text',
+                                         'text': json_data.get('content', '')},
+                                        {'type': 'image_url',
+                                         'image_url': {'url': image_data}}
                                     ]
                                 }
                         except Exception as e:
@@ -668,12 +669,12 @@ class LLMNode(Node):
                     return
 
                 tool_choice = self.get_parameter('tool_choice').value
-                
-                # If streaming is enabled, we use it even for tool detection to get reasoning ASAP
+
+                # If streaming, use it even for tool detection to get reasoning ASAP
                 if stream_enabled:
                     full_response = ''
                     full_reasoning = ''
-                    tool_calls_chunks = {} # index -> {id, name, arguments_str}
+                    tool_calls_chunks = {}  # index -> {id, name, arguments_str}
 
                     async_stream = self.llm_client.process_prompt_stream(
                         self.chat_history,
@@ -683,32 +684,41 @@ class LLMNode(Node):
 
                     for chunk in async_stream:
                         if self._cancel_requested:
-                            self.pub_response.publish(String(data='[Cancelled]'))
+                            self.pub_response.publish(
+                                String(data='[Cancelled]'))
                             return
-                        
+
                         if isinstance(chunk, dict):
                             content = chunk.get('content')
                             reasoning = chunk.get('reasoning')
-                            t_calls = chunk.get('tool_calls') # We need to support this in client
+                            # We need to support this in client
+                            t_calls = chunk.get('tool_calls')
 
                             if reasoning is not None:
                                 full_reasoning += reasoning
-                                self.pub_reasoning.publish(String(data=reasoning))
+                                self.pub_reasoning.publish(
+                                    String(data=reasoning))
                             if content:
                                 full_response += content
                                 self.pub_stream.publish(String(data=content))
-                            
+
                             if t_calls:
                                 for tc in t_calls:
                                     idx = tc.get('index', 0)
                                     if idx not in tool_calls_chunks:
-                                        tool_calls_chunks[idx] = {'id': '', 'name': '', 'args': ''}
-                                    if tc.get('id'): tool_calls_chunks[idx]['id'] += tc['id']
+                                        tool_calls_chunks[idx] = {
+                                            'id': '', 'name': '', 'args': ''}
+                                    if tc.get('id'):
+                                        tool_calls_chunks[idx]['id'] += tc['id']
                                     if tc.get('function'):
                                         f = tc['function']
-                                        if f.get('name'): tool_calls_chunks[idx]['name'] += f['name']
-                                        if f.get('arguments'): tool_calls_chunks[idx]['args'] += f['arguments']
-                        
+                                        if f.get('name'):
+                                            tool_calls_chunks[idx]['name'] += (
+                                                f['name'])
+                                        if f.get('arguments'):
+                                            tool_calls_chunks[idx]['args'] += (
+                                                f['arguments'])
+
                         elif isinstance(chunk, str):
                             if chunk.startswith('[ERROR:'):
                                 self.get_logger().error(chunk)
@@ -717,23 +727,32 @@ class LLMNode(Node):
 
                     # Process collected tool calls if any
                     if tool_calls_chunks:
-                        assistant_msg = {'role': 'assistant', 'content': full_response, 'tool_calls': []}
-                        if full_reasoning: assistant_msg['reasoning_content'] = full_reasoning
-                        
+                        assistant_msg = {
+                            'role': 'assistant',
+                            'content': full_response,
+                            'tool_calls': []
+                        }
+                        if full_reasoning:
+                            assistant_msg['reasoning_content'] = full_reasoning
+
                         for idx in sorted(tool_calls_chunks.keys()):
                             tc = tool_calls_chunks[idx]
                             assistant_msg['tool_calls'].append({
                                 'id': tc['id'],
                                 'type': 'function',
-                                'function': {'name': tc['name'], 'arguments': tc['args']}
+                                'function': {
+                                    'name': tc['name'],
+                                    'arguments': tc['args']
+                                }
                             })
-                        
+
                         self.chat_history.append(assistant_msg)
                         tool_call_count += 1
-                        
+
                         # Execute tools
                         for tool_call in assistant_msg['tool_calls']:
-                            if self._cancel_requested: return
+                            if self._cancel_requested:
+                                return
                             func_name = tool_call['function']['name']
                             tool_call_id = tool_call['id']
                             func_to_call = self.tool_functions.get(func_name)
@@ -741,30 +760,60 @@ class LLMNode(Node):
                             if not func_to_call:
                                 err = f"Tool '{func_name}' not found."
                                 self.get_logger().error(err)
-                                self.chat_history.append({'tool_call_id': tool_call_id, 'role': 'tool', 'name': func_name, 'content': err})
+                                self.chat_history.append({
+                                    'tool_call_id': tool_call_id,
+                                    'role': 'tool',
+                                    'name': func_name,
+                                    'content': err
+                                })
                                 continue
 
                             try:
                                 args_raw = tool_call['function']['arguments']
                                 args = json.loads(args_raw)
-                                self.get_logger().info(f"Calling tool '{func_name}' with args: {args_raw}")
-                                self.pub_tool_calls.publish(String(data=json.dumps({'name': func_name, 'arguments': args_raw, 'id': tool_call_id})))
+                                self.get_logger().info(
+                                    f"Calling tool '{func_name}' with args: "
+                                    f"{args_raw}")
+                                self.pub_tool_calls.publish(String(data=json.dumps({
+                                    'name': func_name,
+                                    'arguments': args_raw,
+                                    'id': tool_call_id
+                                })))
                                 result = func_to_call(**args)
-                                c_str = (result if isinstance(result, str) else json.dumps(result, ensure_ascii=False))
-                                self.chat_history.append({'tool_call_id': tool_call_id, 'role': 'tool', 'name': func_name, 'content': c_str})
+                                c_str = (
+                                    result if isinstance(result, str)
+                                    else json.dumps(result, ensure_ascii=False))
+                                self.chat_history.append({
+                                    'tool_call_id': tool_call_id,
+                                    'role': 'tool',
+                                    'name': func_name,
+                                    'content': c_str
+                                })
                             except Exception as e:
-                                self.get_logger().error(f'Tool {func_name} failed: {e}')
-                                self.chat_history.append({'tool_call_id': tool_call_id, 'role': 'tool', 'name': func_name, 'content': str(e)})
-                        continue # Go back to while loop to see if model wants more tools
+                                self.get_logger().error(
+                                    f'Tool {func_name} failed: {e}')
+                                self.chat_history.append({
+                                    'tool_call_id': tool_call_id,
+                                    'role': 'tool',
+                                    'name': func_name,
+                                    'content': str(e)
+                                })
+                        # Go back to while loop to see if model wants more tools
+                        continue
                     else:
                         # No tool calls, finishing up
                         eof_str = self.get_parameter('eof').value
-                        if eof_str: self.pub_stream.publish(String(data=eof_str))
+                        if eof_str:
+                            self.pub_stream.publish(String(data=eof_str))
                         self.pub_response.publish(String(data=full_response))
-                        assistant_message = {'role': 'assistant', 'content': full_response}
-                        if full_reasoning: assistant_message['reasoning_content'] = full_reasoning
+                        assistant_message = {
+                            'role': 'assistant', 'content': full_response}
+                        if full_reasoning:
+                            assistant_message['reasoning_content'] = (
+                                full_reasoning)
                         self.chat_history.append(assistant_message)
-                        self._publish_latest_turn(prompt_text_for_log, assistant_message)
+                        self._publish_latest_turn(
+                            prompt_text_for_log, assistant_message)
                         break
 
                 else:
@@ -776,44 +825,79 @@ class LLMNode(Node):
                     )
 
                     if not success:
-                        self.get_logger().error(f'LLM request error: {response_message}')
+                        self.get_logger().error(
+                            f'LLM request error: {response_message}')
                         self.chat_history.pop()
                         return
 
                     if response_message.get('tool_calls'):
-                        if response_message.get('content') is None: response_message['content'] = ''
+                        if response_message.get('content') is None:
+                            response_message['content'] = ''
                         self.chat_history.append(response_message)
                         tool_call_count += 1
                         for tool_call in response_message['tool_calls']:
-                            if self._cancel_requested: return
+                            if self._cancel_requested:
+                                return
                             func_name = tool_call['function']['name']
                             tool_call_id = tool_call['id']
                             func_to_call = self.tool_functions.get(func_name)
                             if not func_to_call:
                                 err = f"Tool '{func_name}' not found."
                                 self.get_logger().error(err)
-                                self.chat_history.append({'tool_call_id': tool_call_id, 'role': 'tool', 'name': func_name, 'content': err})
+                                self.chat_history.append({
+                                    'tool_call_id': tool_call_id,
+                                    'role': 'tool',
+                                    'name': func_name,
+                                    'content': err
+                                })
                                 continue
                             try:
                                 args_raw = tool_call['function']['arguments']
                                 args = json.loads(args_raw)
-                                self.get_logger().info(f"Calling tool '{func_name}' with args: {args_raw}")
-                                tool_info = {'name': func_name, 'arguments': args_raw, 'id': tool_call_id}
-                                self.pub_tool_calls.publish(String(data=json.dumps(tool_info)))
+                                self.get_logger().info(
+                                    f"Calling tool '{func_name}' with args: "
+                                    f"{args_raw}")
+                                tool_info = {
+                                    'name': func_name,
+                                    'arguments': args_raw,
+                                    'id': tool_call_id
+                                }
+                                self.pub_tool_calls.publish(
+                                    String(data=json.dumps(tool_info)))
                                 result = func_to_call(**args)
-                                c_str = (result if isinstance(result, str) else json.dumps(result, ensure_ascii=False))
-                                self.chat_history.append({'tool_call_id': tool_call_id, 'role': 'tool', 'name': func_name, 'content': c_str})
+                                c_str = (
+                                    result if isinstance(result, str)
+                                    else json.dumps(result, ensure_ascii=False))
+                                self.chat_history.append({
+                                    'tool_call_id': tool_call_id,
+                                    'role': 'tool',
+                                    'name': func_name,
+                                    'content': c_str
+                                })
                             except Exception as e:
-                                self.get_logger().error(f'Tool {func_name} failed: {e}')
-                                self.chat_history.append({'tool_call_id': tool_call_id, 'role': 'tool', 'name': func_name, 'content': str(e)})
+                                self.get_logger().error(
+                                    f'Tool {func_name} failed: {e}')
+                                self.chat_history.append({
+                                    'tool_call_id': tool_call_id,
+                                    'role': 'tool',
+                                    'name': func_name,
+                                    'content': str(e)
+                                })
                         continue
                     else:
                         res_text = response_message.get('content', '')
-                        reasoning = (response_message.get('reasoning_content') or response_message.get('reasoning'))
-                        if reasoning is not None: self.pub_reasoning.publish(String(data=reasoning))
-                        if res_text: self.pub_response.publish(String(data=res_text))
+                        reasoning = (
+                            response_message.get('reasoning_content') or
+                            response_message.get('reasoning'))
+                        if reasoning is not None:
+                            self.pub_reasoning.publish(
+                                String(data=reasoning))
+                        if res_text:
+                            self.pub_response.publish(
+                                String(data=res_text))
                         self.chat_history.append(response_message)
-                        self._publish_latest_turn(prompt_text_for_log, response_message)
+                        self._publish_latest_turn(
+                            prompt_text_for_log, response_message)
                         break
 
             if tool_call_count >= max_calls:
@@ -838,13 +922,24 @@ class LLMNode(Node):
     def on_params_changed(self, params):
         """Handle parameter changes at runtime."""
         from rcl_interfaces.msg import SetParametersResult
-        result = SetParametersResult(successful=True)
+        from rclpy.parameter import Parameter
 
+        result = SetParametersResult(successful=True)
         system_prompt_updated = False
         client_params_updated = False
 
         for param in params:
-            if param.name in ['system_prompt', 'system_prompt_file']:
+            if param.name == 'stream' and param.type_ == Parameter.Type.BOOL:
+                self.get_logger().info(
+                    f"Streaming {'enabled' if param.value else 'disabled'}")
+            elif (param.name == 'max_tool_calls' and
+                    param.type_ == Parameter.Type.INTEGER):
+                self.get_logger().info(
+                    f'Max tool calls set to {param.value}')
+            elif (param.name == 'queue_size' and
+                    param.type_ == Parameter.Type.INTEGER):
+                self.get_logger().info(f'Queue size set to {param.value}')
+            elif param.name in ['system_prompt', 'system_prompt_file']:
                 system_prompt_updated = True
             elif param.name in [
                 'temperature', 'top_p', 'max_tokens', 'presence_penalty',
@@ -863,21 +958,17 @@ class LLMNode(Node):
                     return result
 
         if system_prompt_updated:
-            # We need to update the system prompt in the chat history.
-            # Usually it's the first message.
             new_prompt = self._load_system_prompt()
             if self.chat_history and self.chat_history[0]['role'] == 'system':
                 self.chat_history[0]['content'] = new_prompt
-                self.get_logger().info('System prompt updated in chat history.')
+                self.get_logger().info('System prompt updated in history.')
             else:
-                # If no system prompt was present, insert it at the beginning
-                self.chat_history.insert(0, {'role': 'system', 'content': new_prompt})
+                self.chat_history.insert(
+                    0, {'role': 'system', 'content': new_prompt})
                 self._prefix_history_len += 1
-                self.get_logger().info('System prompt added to chat history.')
+                self.get_logger().info('System prompt added to history.')
 
         if client_params_updated and hasattr(self, 'llm_client'):
-            # Update client attributes dynamically.
-            # Note: We might need to refresh headers if api_key changes.
             for param in params:
                 if param.name == 'temperature':
                     self.llm_client.temperature = param.value
@@ -894,21 +985,23 @@ class LLMNode(Node):
                 elif param.name == 'stop':
                     self.llm_client.stop = list(param.value)
                 elif param.name == 'api_url':
-                    self.llm_client.api_url = param.value.rstrip('/') + '/chat/completions'
+                    self.llm_client.api_url = (
+                        param.value.rstrip('/') + '/chat/completions')
                 elif param.name == 'api_model':
                     self.llm_client.model = param.value
                 elif param.name == 'api_key':
                     self.llm_client.api_key = param.value
                     if param.value:
-                        self.llm_client.headers['Authorization'] = f'Bearer {param.value}'
+                        self.llm_client.headers['Authorization'] = (
+                            f'Bearer {param.value}')
                     elif 'Authorization' in self.llm_client.headers:
                         del self.llm_client.headers['Authorization']
                 elif param.name == 'response_format':
                     if param.value:
-                        self.llm_client.response_format = json.loads(param.value)
+                        self.llm_client.response_format = json.loads(
+                            param.value)
                     else:
                         self.llm_client.response_format = None
-
             self.get_logger().info('LLM client parameters updated.')
 
         return result
