@@ -81,10 +81,19 @@ class BobChatClient(Node):
         self.is_reasoning = False
         self.waiting_for_response = False
         self.last_stream_time = 0.0
+        self.last_ui_update_time = 0.0
+        self.ui_update_rate_limit = 0.05  # Max 20 FPS (1/0.05)
 
-    def _update_live_display(self):
+    def _update_live_display(self, force=False):
         if not self.live:
             return
+
+        # Simple rate limiting to avoid re-rendering Markdown on every single token
+        # which is very CPU expensive for long responses.
+        current_time = time.time()
+        if not force and (current_time - self.last_ui_update_time < self.ui_update_rate_limit):
+            return
+        self.last_ui_update_time = current_time
 
         parts = []
         if self.panels:
@@ -143,11 +152,11 @@ class BobChatClient(Node):
         self._update_live_display()
 
     def response_callback(self, msg):
-        # We don't read the full msg.data here since we streamed it already,
-        # but you could if streaming was disabled.
-        # This acts as a clear end signal.
+        # ...
         if self.is_receiving or self.is_reasoning:
             if self.live:
+                # Force one final update to ensure everything is rendered
+                self._update_live_display(force=True)
                 self.live.stop()
                 self.live = None
             self.is_receiving = False

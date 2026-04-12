@@ -197,7 +197,7 @@ class OpenAICompatibleClient:
             )
             response.raise_for_status()
 
-            for line in response.iter_lines():
+            for line in response.iter_lines(chunk_size=1):
                 if line:
                     line_str = line.decode('utf-8')
                     if line_str.startswith('data: '):
