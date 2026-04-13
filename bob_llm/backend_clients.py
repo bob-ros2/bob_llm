@@ -204,9 +204,6 @@ class OpenAICompatibleClient:
                             if (content is not None or
                                     reasoning is not None or
                                     t_calls is not None):
-                                if self.logger:
-                                    self.logger.debug(
-                                        f'YIELDING: c={repr(content)}, r={repr(reasoning)}')
                                 yield {
                                     'content': content,
                                     'reasoning': reasoning,
