@@ -1,5 +1,6 @@
 [![ROS 2 CI](https://github.com/bob-ros2/bob_llm/actions/workflows/ros_ci.yml/badge.svg)](https://github.com/bob-ros2/bob_llm/actions/workflows/ros_ci.yml)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![amd64](https://img.shields.io/github/actions/workflow/status/bob-ros2/bob_llm/docker.yml?label=amd64&logo=docker)](https://github.com/bob-ros2/bob_llm/actions/workflows/docker.yml)
+[![arm64](https://img.shields.io/github/actions/workflow/status/bob-ros2/bob_llm/docker.yml?label=arm64&logo=docker)](https://github.com/bob-ros2/bob_llm/actions/workflows/docker.yml)
 
 # ROS Package [bob_llm](https://github.com/bob-ros2/bob_llm)
 
