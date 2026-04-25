@@ -99,7 +99,7 @@ class LLMNode(Node):
                 type=ParameterType.PARAMETER_STRING,
                 description=(
                     "The specific model name to use (e.g., 'gpt-4', 'llama3'). "
-                    "[ENV: LLM_API_MODEL]"
+                    '[ENV: LLM_API_MODEL]'
                 )
             )
         )
@@ -310,7 +310,7 @@ class LLMNode(Node):
                 type=ParameterType.PARAMETER_STRING,
                 description=(
                     "Tool calling behavior ('auto', 'none', 'required'). ' "
-                    "[ENV: LLM_TOOL_CHOICE]"
+                    '[ENV: LLM_TOOL_CHOICE]'
                 )
             )
         )
