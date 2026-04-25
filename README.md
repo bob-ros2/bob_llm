@@ -186,6 +186,14 @@ The node is configured through a ROS parameters YAML file. Most parameters suppo
 | `skill_dir` | string | `./config/skills` | Directory where skills are stored. [ENV: LLM_SKILL_DIR] |
 | `message_log` | string | `""` | If set, appends conversation turns to this JSON file. [ENV: LLM_MESSAGE_LOG] |
 | `response_format` | string | `""` | JSON string defining the output format. [ENV: LLM_RESPONSE_FORMAT] |
+| `eof` | string | `""` | Optional string to publish on llm_stream when generation is finished. [ENV: LLM_EOF] |
+
+### Security Note: API Key Cloaking
+
+For security reasons, the `api_key` parameter is **"cloaked"** immediately after the node initializes. Once the key has been read into the node's internal memory, the public ROS parameter is cleared. This prevents the key from being accidentally exposed or read via `ros2 param get /llm api_key`.
+
+> [!TIP]
+> For production environments, it is best practice to use an **API Gateway** or Reverse Proxy to inject authentication tokens. This avoids passing sensitive keys through the ROS parameter system entirely.
 
 ### Structured JSON Output
 
