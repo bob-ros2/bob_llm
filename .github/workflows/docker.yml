@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_BASE: ghcr.io/${{ github.repository_owner }}/bob_llm
+  IMAGE_BASE: ghcr.io/${{ github.repository_owner }}/bob-llm
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
