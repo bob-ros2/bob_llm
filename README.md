@@ -240,6 +240,8 @@ The `bob_llm` node implements the [Anthropic Agent Skills](https://agentskills.i
 #### 1. Skill Discovery
 Add the path of `config/skill_tools.py` to your `tool_interfaces` to enable the skill discovery API (`load_skill_info`, `execute_skill_script`, etc.).
 
+**Configuration:** Ensure the `skill_dir` parameter points to a valid directory where your Agentskills are stored. A sample collection of skills is provided in the `./config/skills` directory of the package.
+
 #### 2. Ready-to-use Tools
 - **ROS CLI Tools (`config/ros_cli_tools.py`):** Inspect and control the ROS system.
 - **Qdrant Memory Tools (`config/qdrant_tools.py`):** Semantic long-term memory.
