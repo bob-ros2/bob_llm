@@ -18,6 +18,38 @@ The `bob_llm` package provides a ROS 2 node (`llm node`) that acts as a powerful
 -   **Multi-modality:** Supports multimodal input (e.g., images) via JSON prompts.
 -   **Lightweight:** The node core requires only standard Python libraries (`requests`, `rich`, `prompt_toolkit`).
 
+## Docker Usage
+
+The `bob_llm` node is available as a multi-arch Docker image. All ROS parameters can be configured via environment variables (prefixed with `LLM_`).
+
+### Running with Docker
+
+```bash
+docker run -it --rm \
+  --name bob-llm \
+  -e LLM_API_URL="http://192.168.1.100:8000/v1" \
+  -e LLM_API_KEY="your_secret_token" \
+  -e LLM_API_MODEL="llama3" \
+  -e LLM_TEMPERATURE="0.5" \
+  ghcr.io/bob-ros2/bob-llm:latest
+```
+
+### Running with Docker Compose
+
+```yaml
+services:
+  llm:
+    image: ghcr.io/bob-ros2/bob-llm:latest
+    container_name: bob-llm
+    environment:
+      - LLM_API_URL=http://llm-backend:8000/v1
+      - LLM_API_KEY=sk-12345
+      - LLM_API_MODEL=gpt-4
+      - LLM_SYSTEM_PROMPT="You are a helpful robot assistant named Bob."
+      - LLM_TEMPERATURE=0.8
+    restart: always
+```
+
 
 ## Installation
 
@@ -135,17 +167,24 @@ The node is configured through a ROS parameters YAML file. Most parameters suppo
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `api_type` | string | `openai` | LLM backend API type. |
-| `api_url` | string | `http://...` | Base URL of the LLM backend. |
-| `api_key` | string | `no_key` | API key for authentication. |
-| `api_model` | string | `""` | Specific model name (e.g., "gpt-4"). |
-| `system_prompt` | string | `""` | System context instructions. |
-| `max_history_length` | integer | `10` | Max conversation turns to remember. |
-| `max_tool_calls` | integer | `5` | Max consecutive tool calls allowed. |
-| `stream` | bool | `true` | Enable/disable token streaming. |
-| `temperature` | double | `0.7` | Output randomness. |
-| `tool_interfaces` | string array | `[]` | Paths to Python tool files. |
-| `skill_dir` | string | `./config/skills` | Directory where skills are stored. |
+| `api_type` | string | `openai_compatible` | The type of the LLM backend API (e.g., "openai_compatible"). [ENV: LLM_API_TYPE] |
+| `api_url` | string | `http://localhost:8000/v1` | The base URL of the LLM backend API. [ENV: LLM_API_URL] |
+| `api_key` | string | `no_key` | The API key for authentication with the LLM backend. [ENV: LLM_API_KEY] |
+| `api_model` | string | `""` | The specific model name to use (e.g., 'gpt-4', 'llama3'). [ENV: LLM_API_MODEL] |
+| `system_prompt` | string | `""` | The system prompt to set the LLM context. [ENV: LLM_SYSTEM_PROMPT] |
+| `system_prompt_file` | string | `""` | Path to a file containing the system prompt. [ENV: LLM_SYSTEM_PROMPT_FILE] |
+| `max_history_length` | integer | `10` | Max turns to keep in history. [ENV: LLM_MAX_HISTORY_LENGTH] Range: [0, 1000] |
+| `max_tool_calls` | integer | `5` | Max consecutive tool calls allowed. [ENV: LLM_MAX_TOOL_CALLS] Range: [0, 50] |
+| `stream` | bool | `true` | Enable/disable streaming for the final LLM response. [ENV: LLM_STREAM] |
+| `temperature` | double | `0.7` | Controls the randomness of the output. [ENV: LLM_TEMPERATURE] Range: [0.0, 2.0] |
+| `top_p` | double | `1.0` | Nucleus sampling diversity control. [ENV: LLM_TOP_P] Range: [0.0, 1.0] |
+| `max_tokens` | integer | `0` | Max tokens to generate. 0 means no limit. [ENV: LLM_MAX_TOKENS] |
+| `presence_penalty` | double | `0.0` | Penalizes new tokens based on presence. [ENV: LLM_PRESENCE_PENALTY] Range: [-2.0, 2.0]|
+| `frequency_penalty`| double | `0.0` | Penalizes new tokens based on frequency. [ENV: LLM_FREQUENCY_PENALTY] Range: [-2.0, 2.0]|
+| `tool_interfaces` | string array | `[]` | A list of Python modules or file paths to load as tools. [ENV: LLM_TOOL_INTERFACES] |
+| `skill_dir` | string | `./config/skills` | Directory where skills are stored. [ENV: LLM_SKILL_DIR] |
+| `message_log` | string | `""` | If set, appends conversation turns to this JSON file. [ENV: LLM_MESSAGE_LOG] |
+| `response_format` | string | `""` | JSON string defining the output format. [ENV: LLM_RESPONSE_FORMAT] |
 
 ### Structured JSON Output
 

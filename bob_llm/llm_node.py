@@ -64,7 +64,7 @@ class LLMNode(Node):
             os.environ.get('LLM_API_TYPE', 'openai_compatible'),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description='The type of the LLM backend API (e.g., "openai_compatible").'
+                description='The type of the LLM backend API (e.g., "openai_compatible"). [ENV: LLM_API_TYPE]'
             )
         )
         self.declare_parameter(
@@ -73,7 +73,7 @@ class LLMNode(Node):
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
                 description=(
-                    'The base URL of the LLM backend API. '
+                    'The base URL of the LLM backend API. [ENV: LLM_API_URL] '
                     'The node appends "/chat/completions" automatically.'
                 )
             )
@@ -83,7 +83,7 @@ class LLMNode(Node):
             os.environ.get('LLM_API_KEY', 'no_key'),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description='The API key for authentication with the LLM backend.'
+                description='The API key for authentication with the LLM backend. [ENV: LLM_API_KEY]'
             )
         )
         self.declare_parameter(
@@ -91,7 +91,7 @@ class LLMNode(Node):
             os.environ.get('LLM_API_MODEL', ''),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description="The specific model name to use (e.g., 'gpt-4', 'llama3')."
+                description="The specific model name to use (e.g., 'gpt-4', 'llama3'). [ENV: LLM_API_MODEL]"
             )
         )
         self.declare_parameter(
@@ -100,7 +100,7 @@ class LLMNode(Node):
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
                 description=(
-                    'The system prompt to set the LLM context. '
+                    'The system prompt to set the LLM context. [ENV: LLM_SYSTEM_PROMPT] '
                     'If this is a valid file path, the content of the file will be used.'
                 )
             )
@@ -111,7 +111,7 @@ class LLMNode(Node):
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
                 description=(
-                    'Path to a file containing the system prompt. '
+                    'Path to a file containing the system prompt. [ENV: LLM_SYSTEM_PROMPT_FILE] '
                     'Takes precedence over system_prompt.'
                 )
             )
@@ -121,7 +121,7 @@ class LLMNode(Node):
             os.environ.get('LLM_INITIAL_MESSAGES_JSON', '[]'),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description='A JSON string of initial messages for few-shot prompting.'
+                description='A JSON string of initial messages for few-shot prompting. [ENV: LLM_INITIAL_MESSAGES_JSON]'
             )
         )
         self.declare_parameter(
@@ -129,7 +129,7 @@ class LLMNode(Node):
             int(os.environ.get('LLM_MAX_HISTORY_LENGTH', '10')),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_INTEGER,
-                description='Maximum number of conversational turns to keep in history.'
+                description='Maximum number of conversational turns to keep in history. [ENV: LLM_MAX_HISTORY_LENGTH] Range: [0, 1000]'
             )
         )
         self.declare_parameter(
@@ -137,7 +137,7 @@ class LLMNode(Node):
             os.environ.get('LLM_STREAM', 'true').lower() in ('true', '1', 'yes'),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_BOOL,
-                description='Enable or disable streaming for the final LLM response.'
+                description='Enable or disable streaming for the final LLM response. [ENV: LLM_STREAM]'
             )
         )
         self.declare_parameter(
@@ -145,7 +145,7 @@ class LLMNode(Node):
             int(os.environ.get('LLM_MAX_TOOL_CALLS', '5')),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_INTEGER,
-                description='Maximum number of consecutive tool calls before aborting.'
+                description='Maximum number of consecutive tool calls before aborting. [ENV: LLM_MAX_TOOL_CALLS] Range: [0, 50]'
             )
         )
         self.declare_parameter(
@@ -153,7 +153,7 @@ class LLMNode(Node):
             float(os.environ.get('LLM_TEMPERATURE', '0.7')),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE,
-                description='Controls the randomness of the output. Lower is more deterministic.'
+                description='Controls the randomness of the output. [ENV: LLM_TEMPERATURE] Range: [0.0, 2.0]'
             )
         )
         self.declare_parameter(
@@ -161,7 +161,7 @@ class LLMNode(Node):
             float(os.environ.get('LLM_TOP_P', '1.0')),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE,
-                description='Nucleus sampling. Controls output diversity.'
+                description='Nucleus sampling diversity control. [ENV: LLM_TOP_P] Range: [0.0, 1.0]'
             )
         )
         self.declare_parameter(
@@ -169,7 +169,7 @@ class LLMNode(Node):
             int(os.environ.get('LLM_MAX_TOKENS', '0')),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_INTEGER,
-                description='Maximum number of tokens to generate. 0 means no limit.'
+                description='Maximum number of tokens to generate. 0 means no limit. [ENV: LLM_MAX_TOKENS]'
             )
         )
         self.declare_parameter(
@@ -177,7 +177,7 @@ class LLMNode(Node):
             os.environ.get('LLM_STOP', 'stop_llm').split(','),
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING_ARRAY,
-                description='A list of sequences to stop generation at.'
+                description='A list of sequences to stop generation at. [ENV: LLM_STOP]'
             )
         )
         self.declare_parameter(
@@ -185,7 +185,7 @@ class LLMNode(Node):
             float(os.environ.get('LLM_PRESENCE_PENALTY', '0.0')),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE,
-                description='Penalizes new tokens based on their presence in the text so far.'
+                description='Penalizes new tokens based on presence. [ENV: LLM_PRESENCE_PENALTY] Range: [-2.0, 2.0]'
             )
         )
         self.declare_parameter(
@@ -193,7 +193,7 @@ class LLMNode(Node):
             float(os.environ.get('LLM_FREQUENCY_PENALTY', '0.0')),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE,
-                description='Penalizes new tokens based on their frequency in the text.'
+                description='Penalizes new tokens based on frequency. [ENV: LLM_FREQUENCY_PENALTY] Range: [-2.0, 2.0]'
             )
         )
         self.declare_parameter(
@@ -201,15 +201,15 @@ class LLMNode(Node):
             float(os.environ.get('LLM_API_TIMEOUT', '120.0')),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_DOUBLE,
-                description='Timeout in seconds for API requests to the LLM backend.'
+                description='Timeout in seconds for API requests. [ENV: LLM_API_TIMEOUT]'
             )
         )
         self.declare_parameter(
             'tool_interfaces',
-            [''],
+            os.environ.get('LLM_TOOL_INTERFACES', '').split(',') if os.environ.get('LLM_TOOL_INTERFACES') else [''],
             descriptor=ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING_ARRAY,
-                description='A list of Python modules or file paths to load as tools.'
+                description='A list of Python modules or file paths to load as tools. [ENV: LLM_TOOL_INTERFACES]'
             )
         )
         self.declare_parameter(
@@ -217,15 +217,15 @@ class LLMNode(Node):
             os.environ.get('LLM_MESSAGE_LOG', ''),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description='If set, appends each user/assistant turn to this JSON file.'
+                description='If set, appends conversation turns to this JSON file. [ENV: LLM_MESSAGE_LOG]'
             )
         )
         self.declare_parameter(
             'process_image_urls',
-            False,
+            os.environ.get('LLM_PROCESS_IMAGE_URLS', 'false').lower() in ('true', '1', 'yes'),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_BOOL,
-                description='If true, processes image_url in JSON prompts.'
+                description='If true, processes image_url in JSON prompts. [ENV: LLM_PROCESS_IMAGE_URLS]'
             )
         )
         self.declare_parameter(
@@ -233,7 +233,7 @@ class LLMNode(Node):
             os.environ.get('LLM_RESPONSE_FORMAT', ''),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description='JSON string defining the output format.'
+                description='JSON string defining the output format. [ENV: LLM_RESPONSE_FORMAT]'
             )
         )
         self.declare_parameter(
@@ -241,7 +241,7 @@ class LLMNode(Node):
             os.environ.get('LLM_EOF', ''),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description='Optional string to publish on llm_stream when generation is finished.'
+                description='Optional string to publish on llm_stream when generation is finished. [ENV: LLM_EOF]'
             )
         )
         self.declare_parameter(
@@ -249,7 +249,7 @@ class LLMNode(Node):
             os.environ.get('LLM_TOOL_CHOICE', 'auto'),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description="Tool calling behavior ('auto', 'none', 'required', or tool object)."
+                description="Tool calling behavior ('auto', 'none', 'required'). [ENV: LLM_TOOL_CHOICE]"
             )
         )
         share_dir = get_package_share_directory('bob_llm')
@@ -260,7 +260,7 @@ class LLMNode(Node):
             os.environ.get('LLM_SKILL_DIR', default_skill_dir),
             ParameterDescriptor(
                 type=ParameterType.PARAMETER_STRING,
-                description='Directory where skills are stored.'
+                description='Directory where skills are stored. [ENV: LLM_SKILL_DIR]'
             )
         )
 
