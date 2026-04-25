@@ -17,6 +17,7 @@ The `bob_llm` package provides a ROS 2 node (`llm node`) that acts as a powerful
 -   **Interactive Chat CLI:** Includes a premium terminal interface with Markdown rendering and multi-line support.
 -   **Multi-modality:** Supports multimodal input (e.g., images) via JSON prompts.
 -   **Lightweight:** The node core requires only standard Python libraries (`requests`, `rich`, `prompt_toolkit`).
+-   **Multi-arch Docker Support:** Ready-to-use Docker images for `amd64` and `arm64`, fully configurable via environment variables for easy deployment.
 
 ## Docker Usage
 
