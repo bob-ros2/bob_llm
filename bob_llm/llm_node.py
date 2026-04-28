@@ -796,7 +796,7 @@ class LLMNode(Node):
                             'role': 'assistant',
                             'content': full_response,
                             'reasoning_content': (
-                                full_reasoning if full_reasoning else ""
+                                full_reasoning if full_reasoning else ''
                             ),
                             'tool_calls': []
                         }
