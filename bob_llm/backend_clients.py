@@ -91,7 +91,7 @@ class OpenAICompatibleClient:
             msg_copy = msg.copy()
             msg_copy.pop('reasoning_content', None)
             msg_copy.pop('reasoning', None)
-            
+
             content = msg_copy.get('content')
             if content is None:
                 msg_copy['content'] = ''
