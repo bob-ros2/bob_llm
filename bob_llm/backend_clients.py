@@ -213,7 +213,13 @@ class OpenAICompatibleClient:
                         continue
 
         except requests.exceptions.RequestException as e:
-            error_msg = f'API stream request failed: {e}'
+            err_body = ""
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    err_body = f" | Body: {e.response.text}"
+                except Exception:
+                    pass
+            error_msg = f'API stream request failed: {e}{err_body}'
             if self.logger:
                 self.logger.error(error_msg)
                 try:
