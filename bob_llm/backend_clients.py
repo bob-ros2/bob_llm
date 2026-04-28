@@ -219,4 +219,11 @@ class OpenAICompatibleClient:
             error_msg = f'API stream request failed: {e}'
             if self.logger:
                 self.logger.error(error_msg)
+                try:
+                    payload_str = json.dumps(payload)
+                    self.logger.error(
+                        f'DUMPING PAYLOAD: {payload_str}'
+                    )
+                except Exception:
+                    pass
             yield f'[ERROR: {error_msg}]'
