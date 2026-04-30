@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Test configuration and fixtures for bob_llm integration tests."""
+
 import pytest
 import rclpy
 
-@pytest.fixture(scope="session")
+
+@pytest.fixture(scope='session')
 def ros_context():
     """Fixture for ROS 2 context management."""
     if not rclpy.ok():

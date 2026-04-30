@@ -40,12 +40,14 @@ if(BUILD_TESTING)
   ament_flake8(
     bob_llm
     config
+    tests
   )
 
   find_package(ament_cmake_pep257 REQUIRED)
   ament_pep257(
     bob_llm
     config
+    tests
   )
 endif()
 
