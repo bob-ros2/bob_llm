@@ -85,7 +85,7 @@ class OpenAICompatibleClient:
         :param stream: A boolean indicating whether to enable streaming.
         :return: A dictionary representing the complete JSON payload.
         """
-        # Sanitize history: ensure all messages have content as string
+        # Sanitize history: ensure all messages have content as string (except tool calls)
         sanitized_history = []
         for msg in history:
             msg_copy = msg.copy()
@@ -93,7 +93,9 @@ class OpenAICompatibleClient:
             # Sanitize content
             content = msg_copy.get('content')
             if content is None:
-                msg_copy['content'] = ''
+                # For tool calls, many APIs prefer content to be null/None
+                if not msg_copy.get('tool_calls'):
+                    msg_copy['content'] = ''
             elif not isinstance(content, str):
                 if isinstance(content, (list, dict)):
                     msg_copy['content'] = json.dumps(content)
@@ -231,10 +233,9 @@ class OpenAICompatibleClient:
             if self.logger:
                 self.logger.error(error_msg)
                 try:
-                    payload_str = json.dumps(payload)
-                    self.logger.error(
-                        f'DUMPING PAYLOAD: {payload_str}'
-                    )
-                except Exception:
-                    pass
+                    # Use default=str to handle non-serializable objects (like ROS messages)
+                    payload_str = json.dumps(payload, indent=2, default=str)
+                    self.logger.error(f'DUMPING PAYLOAD:\n{payload_str}')
+                except Exception as e_log:
+                    self.logger.error(f'Failed to dump payload: {e_log}')
             yield f'[ERROR: {error_msg}]'
