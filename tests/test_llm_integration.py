@@ -21,7 +21,8 @@ import subprocess
 import time
 
 import pytest
-from rclpy.executors import MultiThreadedExecutor
+import rclpy
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from std_msgs.msg import String
 
@@ -102,13 +103,6 @@ class LLMTestNode(Node):
 
         self.pub_prompt = self.create_publisher(String, 'llm_prompt', 10)
 
-    def clear_buffers(self):
-        """Clear all collected message buffers."""
-        self.responses = []
-        self.stream_tokens = []
-        self.reasoning_chunks = []
-        self.tool_calls = []
-
     def response_cb(self, msg):
         """Handle incoming final responses."""
         self.responses.append(msg.data)
@@ -145,8 +139,6 @@ def test_config():
 @pytest.fixture
 def test_domain():
     """Generate a random ROS_DOMAIN_ID for test isolation."""
-    # We use a random domain to ensure this test doesn't collide with
-    # any existing ROS nodes in the network/NAS/Docker environment.
     return str(random.randint(150, 230))
 
 
@@ -173,19 +165,20 @@ def llm_node_process(test_config, test_domain):
         process.kill()
 
 
-def test_full_mandatory_flow(ros_context, llm_node_process, test_config,
-                             test_domain):
+def test_full_mandatory_flow(llm_node_process, test_config, test_domain):
     """Comprehensive test of all mandatory LLM topics."""
+    # Ensure fresh rclpy init for this specific test and domain
+    if rclpy.ok():
+        rclpy.shutdown()
+
+    os.environ['ROS_DOMAIN_ID'] = test_domain
+    rclpy.init()
+
     verbose = test_config.get('TEST_VERBOSE') == '1'
     is_reasoner = test_config.get('LLM_IS_REASONER') == 'true'
 
-    # Set the test node to the same random domain
-    os.environ['ROS_DOMAIN_ID'] = test_domain
-
     test_node = LLMTestNode(verbose=verbose)
-    test_node.clear_buffers()
-
-    executor = MultiThreadedExecutor()
+    executor = SingleThreadedExecutor()
     executor.add_node(test_node)
 
     prompt = (
@@ -212,6 +205,8 @@ def test_full_mandatory_flow(ros_context, llm_node_process, test_config,
         print(f'Prompt: {prompt}')
         print('=' * 50 + '\n')
 
+    # Small sleep to ensure discovery is complete before publishing
+    time.sleep(2.0)
     test_node.pub_prompt.publish(String(data=prompt))
 
     start_time = time.time()
@@ -292,3 +287,4 @@ def test_full_mandatory_flow(ros_context, llm_node_process, test_config,
         assert reasoning_ok, 'MANDATORY: Model is reasoner but no reasoning'
 
     test_node.destroy_node()
+    rclpy.shutdown()
