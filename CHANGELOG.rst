@@ -2,8 +2,11 @@
 Changelog for package bob_llm
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-1.0.3 (2026-04-13)
+
+1.0.3 (2026-04-30)
 ------------------
+* Add integration test 
+* Fix chat history reasoning issues
 * Definitive zero-latency SSE streaming parser using iter_lines for immediate delivery.
 * Fixed UTF-8 character encoding for special characters (ä, ö, ü) in raw byte streams.
 * Optimized chat UI refresh rate to improve human perception during streaming.
