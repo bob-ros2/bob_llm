@@ -5,32 +5,32 @@ Changelog for package bob_llm
 
 1.0.3 (2026-04-30)
 ------------------
-* Add integration test 
-* Fix chat history reasoning issues
-* Definitive zero-latency SSE streaming parser using iter_lines for immediate delivery.
-* Fixed UTF-8 character encoding for special characters (ä, ö, ü) in raw byte streams.
-* Optimized chat UI refresh rate to improve human perception during streaming.
-* Integrated tool call detection directly into reasoning stream to eliminate pre-check delay.
-* Restored 100% flake8/PEP8 compliance (single quotes enforcement).
-* Refactored main interaction loop for robust synchronous execution.
-* Fixed JSON prompt handling and enhanced system prompt file support.
-* Added support for loading system_prompt from files and new system_prompt_file parameter
-* Implemented dynamic parameter reconfiguration for LLM client and system prompt
-* Added optional `eof` parameter to signal the end of a stream on `llm_stream`
-* Added `tool_choice` parameter to dynamically control tool calling behavior
-* Enhanced tool execution logging with result previews for better debugging
-* Removed prefix v1 from chat API path
-* Added support for [Agentskills](https://agentskills.io/) specification
-* Added native Qdrant vector database tools with environment variable configuration
-* Refactored Agent Skills implementation to strictly follow progressive disclosure
-* Fixed Race Condition in LLMNode initialization by pre-initializing llm_client
-* Implemented soft limit for tool calls with system hint for final response
-* Added `llm_reasoning` topic to support live reasoning/thinking content from models (e.g., Gemma 2, DeepSeek)
-* Updated `OpenAICompatibleClient` to extract `reasoning_content` from both stream chunks and blocking responses
-* Enhanced tool safety in `ros_cli_tools.py` by enforcing mandatory discovery of topics, services, and parameters in docstrings
-* Improved type safety in `backend_clients` with proper Tuple annotations and fixed linter issues
-* Added premium interactive terminal chat client with Markdown and optional boxed UI
-* Cleaned up legacy scripts and modernized README documentation
+* Add comprehensive integration test suite for LLM flow verification.
+* Fix chat history reasoning issues and improve turns management.
+* Implement definitive zero-latency SSE streaming via iter_lines.
+* Fix UTF-8 encoding for special characters in raw byte streams.
+* Optimize chat UI refresh rate for better human perception.
+* Integrate tool call detection in reasoning stream for faster response.
+* Restore 100% flake8/PEP8 compliance and single quote enforcement.
+* Refactor main interaction loop for robust synchronous execution.
+* Fix JSON prompt handling and enhance system prompt file support.
+* Add support for dynamic system_prompt_file parameter loading.
+* Implement dynamic parameter reconfiguration for LLM client.
+* Add optional eof parameter to signal end of stream on llm_stream.
+* Add tool_choice parameter for dynamic tool call control.
+* Enhance tool execution logging with result previews.
+* Remove prefix v1 from chat API path for standard compatibility.
+* Add support for Agentskills specification and modular tools.
+* Add native Qdrant vector database tools with env configuration.
+* Refactor Agent Skills to follow progressive disclosure patterns.
+* Fix Race Condition in LLMNode node-to-client initialization.
+* Implement soft limit for tool calls with final response hint.
+* Add llm_reasoning topic for live thinking content support.
+* Update OpenAI client to extract reasoning_content from chunks.
+* Enforce mandatory discovery in tool docstrings for safety.
+* Improve type safety in backend_clients with proper annotations.
+* Add premium interactive terminal chat client with boxed UI.
+* Clean up legacy scripts and modernize README documentation.
 * Contributors: Bob Ros
 
 1.0.2 (2026-02-01)
