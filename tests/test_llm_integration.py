@@ -16,6 +16,7 @@
 
 import json
 import os
+import random
 import subprocess
 import time
 
@@ -142,14 +143,19 @@ def test_config():
 
 
 @pytest.fixture
-def llm_node_process(test_config):
+def test_domain():
+    """Generate a random ROS_DOMAIN_ID for test isolation."""
+    # We use a random domain to ensure this test doesn't collide with
+    # any existing ROS nodes in the network/NAS/Docker environment.
+    return str(random.randint(150, 230))
+
+
+@pytest.fixture
+def llm_node_process(test_config, test_domain):
     """Launch the llm_node in a separate process with isolation."""
     test_env = os.environ.copy()
     test_env.update(test_config)
-
-    # Use existing ROS_DOMAIN_ID or fallback to a safe test domain
-    domain_id = os.environ.get('ROS_DOMAIN_ID', '88')
-    test_env['ROS_DOMAIN_ID'] = domain_id
+    test_env['ROS_DOMAIN_ID'] = test_domain
 
     cmd = ['ros2', 'run', 'bob_llm', 'llm']
     process = subprocess.Popen(
@@ -167,28 +173,17 @@ def llm_node_process(test_config):
         process.kill()
 
 
-def test_full_mandatory_flow(ros_context, llm_node_process, test_config):
+def test_full_mandatory_flow(ros_context, llm_node_process, test_config,
+                             test_domain):
     """Comprehensive test of all mandatory LLM topics."""
     verbose = test_config.get('TEST_VERBOSE') == '1'
     is_reasoner = test_config.get('LLM_IS_REASONER') == 'true'
-    domain_id = os.environ.get('ROS_DOMAIN_ID', '88')
+
+    # Set the test node to the same random domain
+    os.environ['ROS_DOMAIN_ID'] = test_domain
 
     test_node = LLMTestNode(verbose=verbose)
     test_node.clear_buffers()
-
-    # Warn if another node might be interfering
-    if test_node.count_publishers('llm_response') > 1:
-        warn = (
-            f'\n[bold yellow]⚠️ WARNING: Multiple publishers detected on '
-            f'Domain {domain_id}![/bold yellow]\n'
-            'The output might be interleaved/corrupted. '
-            'Please stop other LLM nodes.\n'
-        )
-        if HAS_RICH:
-            console.print(warn)
-        else:
-            print(warn.replace('[bold yellow]', '').replace('[/bold yellow]',
-                                                            ''))
 
     executor = MultiThreadedExecutor()
     executor.add_node(test_node)
@@ -202,7 +197,7 @@ def test_full_mandatory_flow(ros_context, llm_node_process, test_config):
     if HAS_RICH:
         console.print(
             '[bold magenta]───────────────── STARTING INTEGRATION TEST '
-            f'(Domain {domain_id}) ─────────────────[/bold magenta]'
+            f'(Isolated Domain {test_domain}) ─────────────────[/bold magenta]'
         )
         console.print(f'[bold]Prompt:[/bold] {prompt}')
         mode_str = 'REASONING' if is_reasoner else 'STANDARD'
@@ -213,7 +208,7 @@ def test_full_mandatory_flow(ros_context, llm_node_process, test_config):
         )
     else:
         print('\n' + '=' * 50)
-        print(f'--- STARTING INTEGRATION TEST (Domain {domain_id}) ---')
+        print(f'--- STARTING INTEGRATION TEST (Domain {test_domain}) ---')
         print(f'Prompt: {prompt}')
         print('=' * 50 + '\n')
 
