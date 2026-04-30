@@ -797,8 +797,10 @@ class LLMNode(Node):
                             'content': full_response,
                             'tool_calls': []
                         }
-                        if full_reasoning:
-                            assistant_msg['reasoning_content'] = full_reasoning
+                        # Always include reasoning_content in history if it's a
+                        # thinking turn even if empty, to satisfy some API
+                        # gateways.
+                        assistant_msg['reasoning_content'] = full_reasoning
 
                         for idx in sorted(tool_calls_chunks.keys()):
                             tc = tool_calls_chunks[idx]
@@ -872,10 +874,10 @@ class LLMNode(Node):
                             self.pub_stream.publish(String(data=eof_str))
                         self.pub_response.publish(String(data=full_response))
                         assistant_message = {
-                            'role': 'assistant', 'content': full_response}
-                        if full_reasoning:
-                            assistant_message['reasoning_content'] = (
-                                full_reasoning)
+                            'role': 'assistant',
+                            'content': full_response,
+                            'reasoning_content': full_reasoning
+                        }
                         self.chat_history.append(assistant_message)
                         self._publish_latest_turn(
                             prompt_text_for_log, assistant_message)

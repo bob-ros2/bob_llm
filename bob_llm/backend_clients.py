@@ -93,9 +93,9 @@ class OpenAICompatibleClient:
             # Sanitize content
             content = msg_copy.get('content')
             if content is None:
-                # For tool calls, many APIs prefer content to be null/None
-                if not msg_copy.get('tool_calls'):
-                    msg_copy['content'] = ''
+                # Many APIs require assistant messages to have at least an
+                # empty string content
+                msg_copy['content'] = ''
             elif not isinstance(content, str):
                 if isinstance(content, (list, dict)):
                     msg_copy['content'] = json.dumps(content)
