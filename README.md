@@ -246,3 +246,37 @@ Add the path of `config/skill_tools.py` to your `tool_interfaces` to enable the 
 - **ROS CLI Tools (`config/ros_cli_tools.py`):** Inspect and control the ROS system.
 - **Qdrant Memory Tools (`config/qdrant_tools.py`):** Semantic long-term memory.
     - Configured via `LLM_QDRANT_LOCATION`, `LLM_QDRANT_COLLECTION`, etc.
+
+---
+
+## Development & Integration Testing
+
+The package includes a comprehensive integration test to verify the full flow (Reasoning, Streaming, Tool Calls) against a real LLM provider. This test is **not** run automatically by `colcon test` as it requires an external API key and internet access.
+
+### 1. Setup Environment
+Navigate to the `tests` directory and create a `.env` file from the template:
+
+```bash
+cd src/bob_llm/tests
+cp .env.template .env
+```
+
+Edit the `.env` file and configure the following:
+*   **`LLM_API_KEY`**: Your real API key (e.g., from DeepSeek or OpenAI).
+*   **`LLM_TOOL_INTERFACES`**: This **must** be an absolute path to your tool configuration (e.g., `/home/user/ros2_ws/src/bob_llm/config/ros_cli_tools.py`).
+
+### 2. Run the Test
+Use `pytest` directly to run the integration test. The `-s` flag is recommended to see the beautiful rendered output.
+
+```bash
+# From the package root or workspace root
+export ROS_DOMAIN_ID=77
+source install/setup.bash
+pytest src/bob_llm/tests/test_llm_integration.py -s -v
+```
+
+The test will:
+1.  Launch the `llm` node in a isolated background process.
+2.  Send a complex prompt requiring tool use.
+3.  Verify that reasoning, streaming, and tool execution work as expected.
+4.  Print a clean, colored log of the interaction.
