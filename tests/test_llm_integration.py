@@ -139,7 +139,8 @@ def llm_node_process(test_config):
     """Launch the llm_node in a separate process with isolation."""
     test_env = os.environ.copy()
     test_env.update(test_config)
-    test_env['ROS_DOMAIN_ID'] = '88'
+    domain_id = os.environ.get('ROS_DOMAIN_ID', '88')
+    test_env['ROS_DOMAIN_ID'] = domain_id
 
     cmd = ['ros2', 'run', 'bob_llm', 'llm']
     process = subprocess.Popen(
@@ -162,7 +163,7 @@ def test_full_mandatory_flow(ros_context, llm_node_process, test_config):
     verbose = test_config.get('TEST_VERBOSE') == '1'
     is_reasoner = test_config.get('LLM_IS_REASONER') == 'true'
 
-    os.environ['ROS_DOMAIN_ID'] = '88'
+    domain_id = os.environ.get('ROS_DOMAIN_ID', '0')
     test_node = LLMTestNode(verbose=verbose)
     executor = MultiThreadedExecutor()
     executor.add_node(test_node)
@@ -177,7 +178,7 @@ def test_full_mandatory_flow(ros_context, llm_node_process, test_config):
     if HAS_RICH:
         console.print(
             '[bold magenta]───────────────── STARTING INTEGRATION TEST '
-            '(Domain 88) ─────────────────[/bold magenta]'
+            f'(Domain {domain_id}) ─────────────────[/bold magenta]'
         )
         console.print(f'[bold]Prompt:[/bold] {prompt}')
         mode_str = 'REASONING' if is_reasoner else 'STANDARD'
@@ -188,7 +189,7 @@ def test_full_mandatory_flow(ros_context, llm_node_process, test_config):
         )
     else:
         print('\n' + '=' * 50)
-        print('--- STARTING INTEGRATION TEST (Domain 77) ---')
+        print(f'--- STARTING INTEGRATION TEST (Domain {domain_id}) ---')
         print(f'Prompt: {prompt}')
         print('=' * 50 + '\n')
 
