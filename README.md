@@ -269,14 +269,13 @@ Edit the `.env` file and configure the following:
 Use `pytest` directly to run the integration test. The `-s` flag is recommended to see the beautiful rendered output.
 
 ```bash
-# From the package root or workspace root
-export ROS_DOMAIN_ID=77
+# From the workspace root
 source install/setup.bash
 pytest src/bob_llm/tests/test_llm_integration.py -s -v
 ```
 
 The test will:
-1.  Launch the `llm` node in a isolated background process.
+1.  Launch the `llm` node in an isolated background process (using a random ROS_DOMAIN_ID to avoid collisions).
 2.  Send a complex prompt requiring tool use.
 3.  Verify that reasoning, streaming, and tool execution work as expected.
 4.  Print a clean, colored log of the interaction.
