@@ -795,11 +795,10 @@ class LLMNode(Node):
                         assistant_msg = {
                             'role': 'assistant',
                             'content': full_response,
-                            'reasoning_content': (
-                                full_reasoning if full_reasoning else ''
-                            ),
                             'tool_calls': []
                         }
+                        if full_reasoning:
+                            assistant_msg['reasoning_content'] = full_reasoning
 
                         for idx in sorted(tool_calls_chunks.keys()):
                             tc = tool_calls_chunks[idx]

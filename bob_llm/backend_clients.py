@@ -89,6 +89,8 @@ class OpenAICompatibleClient:
         sanitized_history = []
         for msg in history:
             msg_copy = msg.copy()
+            
+            # Sanitize content
             content = msg_copy.get('content')
             if content is None:
                 msg_copy['content'] = ''
@@ -97,6 +99,12 @@ class OpenAICompatibleClient:
                     msg_copy['content'] = json.dumps(content)
                 else:
                     msg_copy['content'] = str(content)
+            
+            # Sanitize reasoning_content if present
+            reasoning = msg_copy.get('reasoning_content')
+            if reasoning is not None and not isinstance(reasoning, str):
+                msg_copy['reasoning_content'] = str(reasoning)
+
             sanitized_history.append(msg_copy)
 
         payload = {
