@@ -797,9 +797,8 @@ class LLMNode(Node):
                             'content': full_response,
                             'tool_calls': []
                         }
-                        # Always include reasoning_content in history if it's a
-                        # thinking turn even if empty, to satisfy some API
-                        # gateways.
+                        # Always include reasoning_content in history if it's a thinking turn
+                        # even if empty, to satisfy some API gateways.
                         assistant_msg['reasoning_content'] = full_reasoning
 
                         for idx in sorted(tool_calls_chunks.keys()):
