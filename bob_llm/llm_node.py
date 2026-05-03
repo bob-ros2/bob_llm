@@ -635,6 +635,7 @@ class LLMNode(Node):
     def _execute_tool_calls(self, tool_calls):
         """
         Execute a list of tool calls and append results to history.
+
         Returns True if at least one tool call succeeded.
         """
         any_success = False
@@ -1025,6 +1026,13 @@ class LLMNode(Node):
             self.get_logger().info('LLM client parameters updated.')
 
         return result
+
+    def destroy_node(self):
+        """Clean up resources before shutting down."""
+        if hasattr(self, '_executor'):
+            self.get_logger().info('Shutting down tool executor...')
+            self._executor.shutdown(wait=False)
+        super().destroy_node()
 
 
 def main(args=None):
