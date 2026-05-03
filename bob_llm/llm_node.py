@@ -314,6 +314,11 @@ class LLMNode(Node):
                 self.get_logger().info(
                     f'Loaded {len(initial_messages)} messages '
                     f'({self._user_turns_count} user turns).')
+                # Log the last message for context
+                if initial_messages:
+                    last_msg = initial_messages[-1]
+                    text = self._get_message_text(last_msg.get('content', ''))
+                    self.get_logger().info(f'Last message: {text[:100]}...')
         except json.JSONDecodeError:
             self.get_logger().error(
                 "Failed to parse 'initial_messages_json'.")
@@ -521,6 +526,21 @@ class LLMNode(Node):
                 f'Trimmed {self._user_turns_count - max_len} old turn(s) from chat history.')
             self._user_turns_count = max_len
 
+    def _get_message_text(self, content):
+        """Extract text from message content (string or multimodal list)."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            texts = []
+            for item in content:
+                if isinstance(item, dict):
+                    if item.get('type') == 'text':
+                        texts.append(item.get('text', ''))
+                    elif item.get('type') == 'image_url':
+                        texts.append('[Image]')
+            return ' '.join(texts).strip()
+        return str(content)
+
     def _process_image_url(self, image_url, text_content):
         """Process an image URL (file or http) and return a multimodal message content."""
         try:
@@ -589,7 +609,14 @@ class LLMNode(Node):
                 prompt_text_for_log = str(json_data)
         except json.JSONDecodeError:
             new_messages = [{'role': 'user', 'content': raw_data}]
-            prompt_text_for_log = raw_data
+
+        # Update prompt_text_for_log based on the actual new messages
+        if new_messages:
+            # Find the last user message in the new batch
+            for m in reversed(new_messages):
+                if m.get('role') == 'user':
+                    prompt_text_for_log = self._get_message_text(m.get('content', ''))
+                    break
 
         # Increment user turn count for new messages
         for m in new_messages:

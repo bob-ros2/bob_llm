@@ -95,11 +95,9 @@ class OpenAICompatibleClient:
             if content is None:
                 # Many APIs require assistant messages to have at least an empty string content
                 msg_copy['content'] = ''
-            elif not isinstance(content, str):
-                if isinstance(content, (list, dict)):
-                    msg_copy['content'] = json.dumps(content)
-                else:
-                    msg_copy['content'] = str(content)
+            elif not isinstance(content, (str, list, dict)):
+                # Only stringify if it's not a standard chat completion content type
+                msg_copy['content'] = str(content)
 
             # Sanitize reasoning_content if present
             reasoning = msg_copy.get('reasoning_content')
