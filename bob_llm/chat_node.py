@@ -54,10 +54,14 @@ class BobChatClient(Node):
         super().__init__('bob_chat_client')
         self.panels = panels
 
-        # Declare queue_size parameter with environment variable fallback
+        # Declare parameters with environment variable fallbacks
         default_queue_size = int(os.environ.get('CHAT_QUEUE_SIZE', '1000'))
         self.declare_parameter('queue_size', default_queue_size)
         queue_size = self.get_parameter('queue_size').value
+
+        default_idle_timeout = float(os.environ.get('CHAT_IDLE_TIMEOUT', '10.0'))
+        self.declare_parameter('idle_timeout', default_idle_timeout)
+        self.idle_timeout = self.get_parameter('idle_timeout').value
 
         self.pub_prompt = self.create_publisher(String, topic_in, queue_size)
         self.sub_stream = self.create_subscription(
@@ -315,7 +319,7 @@ def main(args=None):
                     # or the user forgot to set --topic_response correctly
                     if client_node.is_receiving:
                         idle_time = time.time() - client_node.last_stream_time
-                        if idle_time > 5.0:
+                        if idle_time > client_node.idle_timeout:
                             client_node.response_callback(None)
             except KeyboardInterrupt:
                 client_node.waiting_for_response = False
@@ -327,10 +331,19 @@ def main(args=None):
                 continue
 
     finally:
+        # Ensure the live display is stopped
+        if client_node.live:
+            client_node.live.stop()
+
         console.print('\n[bold red]Session ended. Goodbye![/]')
-        # Using os._exit to forcefully exit and prevent ROS 2 C++ daemon
-        # thread crashes when shutting down the context while spinning.
-        os._exit(0)
+
+        # Graceful ROS 2 shutdown
+        if rclpy.ok():
+            rclpy.shutdown()
+
+        # Wait for the spin thread to finish its cleanup
+        if spin_thread.is_alive():
+            spin_thread.join(timeout=1.0)
 
 
 if __name__ == '__main__':
