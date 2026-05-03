@@ -230,6 +230,7 @@ class LLMNode(Node):
             self.get_logger().info('API key has been cloaked.')
 
         self.chat_history = []
+        self._user_turns_count = 0
         self.load_llm_client()
         self._initialize_chat_history()
         self._prefix_history_len = len(self.chat_history)
@@ -307,8 +308,10 @@ class LLMNode(Node):
             initial_messages = json.loads(initial_messages_str)
             if isinstance(initial_messages, list):
                 self.chat_history.extend(initial_messages)
+                self._user_turns_count = sum(
+                    1 for m in initial_messages if m.get('role') == 'user')
                 self.get_logger().info(
-                    f'Loaded {len(initial_messages)} initial messages from JSON.')
+                    f'Loaded {len(initial_messages)} initial messages ({self._user_turns_count} user turns).')
         except json.JSONDecodeError:
             self.get_logger().error(
                 "Failed to parse 'initial_messages_json'.")
@@ -488,22 +491,32 @@ class LLMNode(Node):
     def _trim_chat_history(self):
         """
         Prevent the chat history from growing indefinitely.
-
-        It trims the oldest conversational turns to stay within the limit.
+        Trims oldest turns after the prefix to stay within max_history_length.
         """
         max_len = self.get_parameter('max_history_length').value
+        if max_len <= 0 or self._user_turns_count <= max_len:
+            return
+
         prefix = self.chat_history[:self._prefix_history_len]
         conversation = self.chat_history[self._prefix_history_len:]
-        user_message_indices = [
-            i for i, msg in enumerate(conversation) if msg['role'] == 'user']
-        num_turns = len(user_message_indices)
 
-        if num_turns > max_len:
-            first_turn_to_keep_idx = user_message_indices[num_turns - max_len]
-            trimmed_conversation = conversation[first_turn_to_keep_idx:]
+        # Find the N-th user message from the back
+        user_turns_found = 0
+        trim_at = 0
+
+        for i in range(len(conversation) - 1, -1, -1):
+            if conversation[i]['role'] == 'user':
+                user_turns_found += 1
+                if user_turns_found == max_len:
+                    trim_at = i
+                    break
+
+        if user_turns_found >= max_len:
+            trimmed_conversation = conversation[trim_at:]
             self.chat_history = prefix + trimmed_conversation
             self.get_logger().info(
-                f'Trimmed {num_turns - max_len} old turn(s) from chat history.')
+                f'Trimmed {self._user_turns_count - max_len} old turn(s) from chat history.')
+            self._user_turns_count = max_len
 
     def _process_image_url(self, image_url, text_content):
         """Process an image URL (file or http) and return a multimodal message content."""
@@ -574,6 +587,11 @@ class LLMNode(Node):
         except json.JSONDecodeError:
             new_messages = [{'role': 'user', 'content': raw_data}]
             prompt_text_for_log = raw_data
+
+        # Increment user turn count for new messages
+        for m in new_messages:
+            if m.get('role') == 'user':
+                self._user_turns_count += 1
 
         return new_messages, prompt_text_for_log
 
