@@ -186,6 +186,7 @@ The node is configured through a ROS parameters YAML file. Most parameters suppo
 | `skill_dir` | string | `./config/skills` | Directory where skills are stored. [ENV: LLM_SKILL_DIR] |
 | `message_log` | string | `""` | If set, appends conversation turns to this JSON file. [ENV: LLM_MESSAGE_LOG] |
 | `response_format` | string | `""` | JSON string defining the output format. [ENV: LLM_RESPONSE_FORMAT] |
+| `tool_timeout` | double | `60.0` | Maximum time in seconds to wait for a tool to execute. [ENV: LLM_TOOL_TIMEOUT] |
 | `eof` | string | `""` | Optional string to publish on llm_stream when generation is finished. [ENV: LLM_EOF] |
 
 ### Security Note: API Key Cloaking

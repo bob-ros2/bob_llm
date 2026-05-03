@@ -5,6 +5,15 @@ Changelog for package bob_llm
 
 1.0.3 (2026-04-30)
 ------------------
+* Refactor monolithic prompt processing into event-driven architecture (removed polling timer).
+* Implement O(n) chat history trimming for improved performance during long conversations.
+* Add robust stream recovery with automatic retry for failed API connections.
+* Implement token buffering for smoother streaming and reduced ROS message overhead.
+* Integrate ThreadPoolExecutor for isolated tool execution with configurable timeouts.
+* Add `tool_timeout` parameter (default 60s) for robust skill execution.
+* Improve multimodal content preservation (images) and smart text extraction for logging.
+* Refine tool budgeting to count only successful calls against the limit.
+* Add clean node shutdown logic with executor and thread cleanup.
 * Add comprehensive integration test suite for LLM flow verification.
 * Fix chat history reasoning issues and improve turns management.
 * Implement definitive zero-latency SSE streaming via iter_lines.
