@@ -681,7 +681,7 @@ class LLMNode(Node):
                     'content': content_str
                 })
             except Exception as e:
-                err_msg = f"Error: Tool execution failed: {e}"
+                err_msg = f'Error: Tool execution failed: {e}'
                 self.get_logger().error(err_msg)
                 self.chat_history.append({
                     'tool_call_id': tool_call_id,
