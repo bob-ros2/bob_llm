@@ -244,10 +244,7 @@ class LLMNode(Node):
 
         self._is_generating = False
         self._cancel_requested = False
-        # Prompt queue to handle incoming prompts when busy
         self._prompt_queue = deque()
-        self._queue_timer = None
-        self._queue_timer_period = 0.1  # Check queue every 100ms
 
         self.sub = self.create_subscription(
             String, 'llm_prompt', self.prompt_callback, DEFAULT_QUEUE_SIZE,
@@ -728,100 +725,95 @@ class LLMNode(Node):
         if self._is_generating:
             self._prompt_queue.append(msg.data)
             self.get_logger().info(f'Queued prompt. Queue size: {len(self._prompt_queue)}')
-            if self._queue_timer is None:
-                self._queue_timer = self.create_timer(
-                    self._queue_timer_period, self._process_queue_callback,
-                    callback_group=ReentrantCallbackGroup())
             return
 
         self._is_generating = True
         self._cancel_requested = False
 
         try:
-            if not self.llm_client:
-                self.get_logger().error('LLM client not available.')
-                return
+            current_prompt_data = msg.data
 
-            self.get_logger().info('Prompt received')
-
-            # 1. Prepare messages and history
-            new_messages, prompt_text_for_log = self._prepare_messages(msg.data)
-            self.chat_history.extend(new_messages)
-            self._trim_chat_history()
-
-            # 2. Main Generation Loop
-            stream_enabled = self.get_parameter('stream').value
-            max_calls = self.get_parameter('max_tool_calls').value
-            tool_choice = self.get_parameter('tool_choice').value
-            tool_call_count = 0
-
-            while tool_call_count < max_calls:
-                if self._cancel_requested:
+            while current_prompt_data:
+                if not self.llm_client:
+                    self.get_logger().error('LLM client not available.')
                     break
 
-                if stream_enabled:
-                    full_response, full_reasoning, tool_calls = self._generate_stream(tool_choice)
-                else:
-                    full_response, full_reasoning, tool_calls = self._generate_sync(tool_choice)
+                self.get_logger().info('Processing prompt...')
 
-                if full_response is None and not tool_calls:
-                    # Error or cancellation in generation
-                    break
+                # 1. Prepare messages and history
+                new_messages, prompt_text_for_log = self._prepare_messages(current_prompt_data)
+                self.chat_history.extend(new_messages)
+                self._trim_chat_history()
 
-                # Update history with assistant turn
-                assistant_message = {
-                    'role': 'assistant',
-                    'content': full_response,
-                    'reasoning_content': full_reasoning
-                }
-                if tool_calls:
-                    assistant_message['tool_calls'] = tool_calls
+                # 2. Main Generation Loop
+                stream_enabled = self.get_parameter('stream').value
+                max_calls = self.get_parameter('max_tool_calls').value
+                tool_choice = self.get_parameter('tool_choice').value
+                tool_call_count = 0
 
-                self.chat_history.append(assistant_message)
+                while tool_call_count < max_calls:
+                    if self._cancel_requested:
+                        break
 
-                if not tool_calls:
-                    # Final turn (no tools)
-                    eof_str = self.get_parameter('eof').value
-                    if eof_str:
-                        self.pub_stream.publish(String(data=eof_str))
-
-                    if not stream_enabled:
-                        # In sync mode, we must publish reasoning/response now
-                        if full_reasoning:
-                            self.pub_reasoning.publish(String(data=full_reasoning))
-                        if full_response:
-                            self.pub_response.publish(String(data=full_response))
+                    if stream_enabled:
+                        full_response, full_reasoning, tool_calls = \
+                            self._generate_stream(tool_choice)
                     else:
-                        # In stream mode, final full response is published here
-                        self.pub_response.publish(String(data=full_response))
+                        full_response, full_reasoning, tool_calls = \
+                            self._generate_sync(tool_choice)
 
-                    self._publish_latest_turn(prompt_text_for_log, assistant_message)
-                    break
+                    if full_response is None and not tool_calls:
+                        # Error or cancellation in generation
+                        break
 
-                # Process Tool Calls
-                tool_call_count += 1
-                self._execute_tool_calls(tool_calls)
-                # Continue loop to get next model turn after tool results
+                    # Update history with assistant turn
+                    assistant_message = {
+                        'role': 'assistant',
+                        'content': full_response,
+                        'reasoning_content': full_reasoning
+                    }
+                    if tool_calls:
+                        assistant_message['tool_calls'] = tool_calls
 
-            if tool_call_count >= max_calls:
-                self.get_logger().warning(f'Max tool calls ({max_calls}) reached.')
+                    self.chat_history.append(assistant_message)
+
+                    if not tool_calls:
+                        # Final turn (no tools)
+                        eof_str = self.get_parameter('eof').value
+                        if eof_str:
+                            self.pub_stream.publish(String(data=eof_str))
+
+                        if not stream_enabled:
+                            # In sync mode, we must publish reasoning/response now
+                            if full_reasoning:
+                                self.pub_reasoning.publish(String(data=full_reasoning))
+                            if full_response:
+                                self.pub_response.publish(String(data=full_response))
+                        else:
+                            # In stream mode, final full response is published here
+                            self.pub_response.publish(String(data=full_response))
+
+                        self._publish_latest_turn(prompt_text_for_log, assistant_message)
+                        break
+
+                    # Process Tool Calls
+                    tool_call_count += 1
+                    self._execute_tool_calls(tool_calls)
+                    # Continue loop to get next model turn after tool results
+
+                if tool_call_count >= max_calls:
+                    self.get_logger().warning(f'Max tool calls ({max_calls}) reached.')
+
+                # Check if there is another prompt in the queue
+                if self._prompt_queue and not self._cancel_requested:
+                    current_prompt_data = self._prompt_queue.popleft()
+                    self.get_logger().info(
+                        f'Processing next queued prompt. Remaining: {len(self._prompt_queue)}')
+                else:
+                    current_prompt_data = None
 
         finally:
             self._is_generating = False
-
-    def _process_queue_callback(self):
-        """Timer callback to process queued prompts."""
-        if self._is_generating:
-            return
-        if not self._prompt_queue:
-            if self._queue_timer is not None:
-                self._queue_timer.cancel()
-                self._queue_timer = None
-            return
-        prompt_data = self._prompt_queue.popleft()
-        msg = String()
-        msg.data = prompt_data
-        self.prompt_callback(msg)
 
     def on_params_changed(self, params):
         """Handle parameter changes at runtime."""
