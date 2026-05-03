@@ -633,7 +633,11 @@ class LLMNode(Node):
         return new_messages, prompt_text_for_log
 
     def _execute_tool_calls(self, tool_calls):
-        """Execute a list of tool calls and append results to history."""
+        """
+        Execute a list of tool calls and append results to history.
+        Returns True if at least one tool call succeeded.
+        """
+        any_success = False
         for tool_call in tool_calls:
             if self._cancel_requested:
                 return
@@ -674,6 +678,9 @@ class LLMNode(Node):
                     content_str = f"Error: Tool '{func_name}' timed out after {timeout}s."
                     self.get_logger().error(content_str)
 
+                if not content_str.startswith('Error:'):
+                    any_success = True
+
                 self.chat_history.append({
                     'tool_call_id': tool_call_id,
                     'role': 'tool',
@@ -689,6 +696,8 @@ class LLMNode(Node):
                     'name': func_name,
                     'content': err_msg
                 })
+
+        return any_success
 
     def _generate_stream(self, tool_choice):
         """
@@ -858,9 +867,12 @@ class LLMNode(Node):
                 max_calls = self.get_parameter('max_tool_calls').value
                 tool_choice = self.get_parameter('tool_choice').value
                 tool_call_count = 0
+                consecutive_errors = 0
 
                 while tool_call_count < max_calls:
-                    if self._cancel_requested:
+                    if self._cancel_requested or consecutive_errors > 3:
+                        if consecutive_errors > 3:
+                            self.get_logger().error('Too many consecutive tool errors. Aborting.')
                         break
 
                     if stream_enabled:
@@ -905,8 +917,12 @@ class LLMNode(Node):
                         break
 
                     # Process Tool Calls
-                    tool_call_count += 1
-                    self._execute_tool_calls(tool_calls)
+                    success = self._execute_tool_calls(tool_calls)
+                    if success:
+                        tool_call_count += 1
+                        consecutive_errors = 0
+                    else:
+                        consecutive_errors += 1
                     # Continue loop to get next model turn after tool results
 
                 if tool_call_count >= max_calls:
