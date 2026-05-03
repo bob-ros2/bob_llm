@@ -651,6 +651,7 @@ class LLMNode(Node):
     def _generate_stream(self, tool_choice):
         """
         Process LLM generation in streaming mode.
+
         Returns (resp, reasoning, tools).
         """
         full_response = ''
@@ -684,9 +685,10 @@ class LLMNode(Node):
                             full_response += content
                             self._stream_buffer += content
 
-                            # Publish if we hit a boundary (space, punctuation, newline) 
+                            # Publish if we hit a boundary (space, punctuation, newline)
                             # or buffer gets too long (e.g. 15 chars)
-                            if any(c in content for c in ' \t\n.,!?;:') or len(self._stream_buffer) > 15:
+                            if any(c in content for c in ' \t\n.,!?;:') or \
+                                    len(self._stream_buffer) > 15:
                                 self.pub_stream.publish(String(data=self._stream_buffer))
                                 self._stream_buffer = ''
 
@@ -708,7 +710,9 @@ class LLMNode(Node):
                     elif isinstance(chunk, str):
                         if chunk.startswith('[ERROR:'):
                             # If we haven't received anything yet, we can retry
-                            if not full_response and not full_reasoning and retry_count < max_retries:
+                            should_retry = not full_response and not full_reasoning \
+                                and retry_count < max_retries
+                            if should_retry:
                                 self.get_logger().warn(
                                     f'Stream error, retrying ({retry_count + 1}/{max_retries})...')
                                 break
