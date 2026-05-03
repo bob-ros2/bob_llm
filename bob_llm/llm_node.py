@@ -42,6 +42,42 @@ class LLMNode(Node):
     This node handles prompts, manages conversation history, and executes tools.
     """
 
+    def _declare_param(self, name, env_name, default, param_type, description):
+        """Declare a ROS parameter with an environment variable fallback."""
+        env_value = os.environ.get(env_name)
+        if env_value is not None:
+            try:
+                if param_type == ParameterType.PARAMETER_INTEGER:
+                    final_value = int(env_value)
+                elif param_type == ParameterType.PARAMETER_DOUBLE:
+                    final_value = float(env_value)
+                elif param_type == ParameterType.PARAMETER_BOOL:
+                    final_value = env_value.lower() in ('true', '1', 'yes')
+                elif param_type == ParameterType.PARAMETER_STRING_ARRAY:
+                    final_value = env_value.split(',')
+                else:
+                    final_value = env_value
+            except ValueError:
+                self.get_logger().warn(
+                    f"Environment variable '{env_name}' has invalid value '{env_value}' "
+                    f'for type {param_type}. Using default: {default}'
+                )
+                final_value = default
+        else:
+            final_value = default
+
+        # Append [ENV: ...] tag to description if not already present
+        env_tag = f'[ENV: {env_name}]'
+        if env_tag not in description:
+            description = f'{description} {env_tag}'
+
+        self.declare_parameter(
+            name,
+            final_value,
+            ParameterDescriptor(type=param_type, description=description)
+        )
+        return self.get_parameter(name).value
+
     def __init__(self):
         super().__init__('llm')
         self.llm_client = None
@@ -59,275 +95,132 @@ class LLMNode(Node):
 
         # ROS parameters
 
-        self.declare_parameter(
-            'api_type',
-            os.environ.get('LLM_API_TYPE', 'openai_compatible'),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description=(
-                    'The type of the LLM backend API (e.g., "openai_compatible"). '
-                    '[ENV: LLM_API_TYPE]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'api_url',
-            os.environ.get('LLM_API_URL', 'http://localhost:8000/v1'),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description=(
-                    'The base URL of the LLM backend API. [ENV: LLM_API_URL] '
-                    'The node appends "/chat/completions" automatically.'
-                )
-            )
-        )
-        self.declare_parameter(
-            'api_key',
-            os.environ.get('LLM_API_KEY', 'no_key'),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description=(
-                    'The API key for authentication with the LLM backend. '
-                    '[ENV: LLM_API_KEY]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'api_model',
-            os.environ.get('LLM_API_MODEL', ''),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description=(
-                    "The specific model name to use (e.g., 'gpt-4', 'llama3'). "
-                    '[ENV: LLM_API_MODEL]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'system_prompt',
-            os.environ.get('LLM_SYSTEM_PROMPT', ''),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description=(
-                    'The system prompt to set the LLM context. [ENV: LLM_SYSTEM_PROMPT] '
-                    'If this is a valid file path, the content of the file will be used.'
-                )
-            )
-        )
-        self.declare_parameter(
-            'system_prompt_file',
-            os.environ.get('LLM_SYSTEM_PROMPT_FILE', ''),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description=(
-                    'Path to a file containing the system prompt. [ENV: LLM_SYSTEM_PROMPT_FILE] '
-                    'Takes precedence over system_prompt.'
-                )
-            )
-        )
-        self.declare_parameter(
-            'initial_messages_json',
-            os.environ.get('LLM_INITIAL_MESSAGES_JSON', '[]'),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description=(
-                    'A JSON string of initial messages for few-shot prompting. '
-                    '[ENV: LLM_INITIAL_MESSAGES_JSON]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'max_history_length',
-            int(os.environ.get('LLM_MAX_HISTORY_LENGTH', '10')),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_INTEGER,
-                description=(
-                    'Maximum number of conversational turns to keep in history. '
-                    '[ENV: LLM_MAX_HISTORY_LENGTH] Range: [0, 1000]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'stream',
-            os.environ.get('LLM_STREAM', 'true').lower() in ('true', '1', 'yes'),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_BOOL,
-                description=(
-                    'Enable or disable streaming for the final LLM response. '
-                    '[ENV: LLM_STREAM]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'max_tool_calls',
-            int(os.environ.get('LLM_MAX_TOOL_CALLS', '5')),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_INTEGER,
-                description=(
-                    'Maximum number of consecutive tool calls before aborting. '
-                    '[ENV: LLM_MAX_TOOL_CALLS] Range: [0, 50]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'temperature',
-            float(os.environ.get('LLM_TEMPERATURE', '0.7')),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_DOUBLE,
-                description=(
-                    'Controls the randomness of the output. '
-                    '[ENV: LLM_TEMPERATURE] Range: [0.0, 2.0]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'top_p',
-            float(os.environ.get('LLM_TOP_P', '1.0')),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_DOUBLE,
-                description=(
-                    'Nucleus sampling diversity control. '
-                    '[ENV: LLM_TOP_P] Range: [0.0, 1.0]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'max_tokens',
-            int(os.environ.get('LLM_MAX_TOKENS', '0')),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_INTEGER,
-                description=(
-                    'Maximum number of tokens to generate. 0 means no limit. '
-                    '[ENV: LLM_MAX_TOKENS]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'stop',
-            os.environ.get('LLM_STOP', 'stop_llm').split(','),
-            descriptor=ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING_ARRAY,
-                description=(
-                    'A list of sequences to stop generation at. '
-                    '[ENV: LLM_STOP]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'presence_penalty',
-            float(os.environ.get('LLM_PRESENCE_PENALTY', '0.0')),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_DOUBLE,
-                description=(
-                    'Penalizes new tokens based on presence. '
-                    '[ENV: LLM_PRESENCE_PENALTY] Range: [-2.0, 2.0]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'frequency_penalty',
-            float(os.environ.get('LLM_FREQUENCY_PENALTY', '0.0')),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_DOUBLE,
-                description=(
-                    'Penalizes new tokens based on frequency. '
-                    '[ENV: LLM_FREQUENCY_PENALTY] Range: [-2.0, 2.0]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'api_timeout',
-            float(os.environ.get('LLM_API_TIMEOUT', '120.0')),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_DOUBLE,
-                description=(
-                    'Timeout in seconds for API requests. '
-                    '[ENV: LLM_API_TIMEOUT]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'tool_interfaces',
-            (os.environ.get('LLM_TOOL_INTERFACES', '').split(',')
-             if os.environ.get('LLM_TOOL_INTERFACES') else ['']),
-            descriptor=ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING_ARRAY,
-                description=(
-                    'A list of Python modules or file paths to load as tools. '
-                    '[ENV: LLM_TOOL_INTERFACES]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'message_log',
-            os.environ.get('LLM_MESSAGE_LOG', ''),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description=(
-                    'If set, appends conversation turns to this JSON file. '
-                    '[ENV: LLM_MESSAGE_LOG]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'process_image_urls',
-            (os.environ.get('LLM_PROCESS_IMAGE_URLS', 'false').lower()
-             in ('true', '1', 'yes')),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_BOOL,
-                description=(
-                    'If true, processes image_url in JSON prompts. '
-                    '[ENV: LLM_PROCESS_IMAGE_URLS]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'response_format',
-            os.environ.get('LLM_RESPONSE_FORMAT', ''),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description=(
-                    'JSON string defining the output format. '
-                    '[ENV: LLM_RESPONSE_FORMAT]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'eof',
-            os.environ.get('LLM_EOF', ''),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description=(
-                    'Optional string to publish on llm_stream when generation is finished. '
-                    '[ENV: LLM_EOF]'
-                )
-            )
-        )
-        self.declare_parameter(
-            'tool_choice',
-            os.environ.get('LLM_TOOL_CHOICE', 'auto'),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description=(
-                    "Tool calling behavior ('auto', 'none', 'required'). ' "
-                    '[ENV: LLM_TOOL_CHOICE]'
-                )
-            )
-        )
+        self._declare_param(
+            'api_type', 'LLM_API_TYPE', 'openai_compatible',
+            ParameterType.PARAMETER_STRING,
+            'The type of the LLM backend API (e.g., "openai_compatible").')
+
+        self._declare_param(
+            'api_url', 'LLM_API_URL', 'http://localhost:8000/v1',
+            ParameterType.PARAMETER_STRING,
+            'The base URL of the LLM backend API. '
+            'The node appends "/chat/completions" automatically.')
+
+        self._declare_param(
+            'api_key', 'LLM_API_KEY', 'no_key',
+            ParameterType.PARAMETER_STRING,
+            'The API key for authentication with the LLM backend.')
+
+        self._declare_param(
+            'api_model', 'LLM_API_MODEL', '',
+            ParameterType.PARAMETER_STRING,
+            "The specific model name to use (e.g., 'gpt-4', 'llama3').")
+
+        self._declare_param(
+            'system_prompt', 'LLM_SYSTEM_PROMPT', '',
+            ParameterType.PARAMETER_STRING,
+            'The system prompt to set the LLM context. '
+            'If this is a valid file path, the content of the file will be used.')
+
+        self._declare_param(
+            'system_prompt_file', 'LLM_SYSTEM_PROMPT_FILE', '',
+            ParameterType.PARAMETER_STRING,
+            'Path to a file containing the system prompt. '
+            'Takes precedence over system_prompt.')
+
+        self._declare_param(
+            'initial_messages_json', 'LLM_INITIAL_MESSAGES_JSON', '[]',
+            ParameterType.PARAMETER_STRING,
+            'A JSON string of initial messages for few-shot prompting.')
+
+        self._declare_param(
+            'max_history_length', 'LLM_MAX_HISTORY_LENGTH', 10,
+            ParameterType.PARAMETER_INTEGER,
+            'Maximum number of conversational turns to keep in history.')
+
+        self._declare_param(
+            'stream', 'LLM_STREAM', True,
+            ParameterType.PARAMETER_BOOL,
+            'Enable or disable streaming for the final LLM response.')
+
+        self._declare_param(
+            'max_tool_calls', 'LLM_MAX_TOOL_CALLS', 5,
+            ParameterType.PARAMETER_INTEGER,
+            'Maximum number of consecutive tool calls before aborting.')
+
+        self._declare_param(
+            'temperature', 'LLM_TEMPERATURE', 0.7,
+            ParameterType.PARAMETER_DOUBLE,
+            'Controls the randomness of the output.')
+
+        self._declare_param(
+            'top_p', 'LLM_TOP_P', 1.0,
+            ParameterType.PARAMETER_DOUBLE,
+            'Nucleus sampling diversity control.')
+
+        self._declare_param(
+            'max_tokens', 'LLM_MAX_TOKENS', 0,
+            ParameterType.PARAMETER_INTEGER,
+            'Maximum number of tokens to generate. 0 means no limit.')
+
+        self._declare_param(
+            'stop', 'LLM_STOP', ['stop_llm'],
+            ParameterType.PARAMETER_STRING_ARRAY,
+            'A list of sequences to stop generation at.')
+
+        self._declare_param(
+            'presence_penalty', 'LLM_PRESENCE_PENALTY', 0.0,
+            ParameterType.PARAMETER_DOUBLE,
+            'Penalizes new tokens based on presence.')
+
+        self._declare_param(
+            'frequency_penalty', 'LLM_FREQUENCY_PENALTY', 0.0,
+            ParameterType.PARAMETER_DOUBLE,
+            'Penalizes new tokens based on frequency.')
+
+        self._declare_param(
+            'api_timeout', 'LLM_API_TIMEOUT', 120.0,
+            ParameterType.PARAMETER_DOUBLE,
+            'Timeout in seconds for API requests.')
+
+        self._declare_param(
+            'tool_interfaces', 'LLM_TOOL_INTERFACES', [''],
+            ParameterType.PARAMETER_STRING_ARRAY,
+            'A list of Python modules or file paths to load as tools.')
+
+        self._declare_param(
+            'message_log', 'LLM_MESSAGE_LOG', '',
+            ParameterType.PARAMETER_STRING,
+            'If set, appends conversation turns to this JSON file.')
+
+        self._declare_param(
+            'process_image_urls', 'LLM_PROCESS_IMAGE_URLS', False,
+            ParameterType.PARAMETER_BOOL,
+            'If true, processes image_url in JSON prompts.')
+
+        self._declare_param(
+            'response_format', 'LLM_RESPONSE_FORMAT', '',
+            ParameterType.PARAMETER_STRING,
+            'JSON string defining the output format.')
+
+        self._declare_param(
+            'eof', 'LLM_EOF', '',
+            ParameterType.PARAMETER_STRING,
+            'Optional string to publish on llm_stream when '
+            'generation is finished.')
+
+        self._declare_param(
+            'tool_choice', 'LLM_TOOL_CHOICE', 'auto',
+            ParameterType.PARAMETER_STRING,
+            "Tool calling behavior ('auto', 'none', 'required').")
+
         share_dir = get_package_share_directory('bob_llm')
         default_skill_dir = os.path.join(share_dir, 'config', 'skills')
 
-        self.declare_parameter(
-            'skill_dir',
-            os.environ.get('LLM_SKILL_DIR', default_skill_dir),
-            ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description=(
-                    'Directory where skills are stored. '
-                    '[ENV: LLM_SKILL_DIR]'
-                )
-            )
-        )
+        self._declare_param(
+            'skill_dir', 'LLM_SKILL_DIR', default_skill_dir,
+            ParameterType.PARAMETER_STRING,
+            'Directory where skills are stored.')
 
         # Cloak API Key: Read from parameter, store in private variable, and clear parameter.
         self._api_key = self.get_parameter('api_key').value
