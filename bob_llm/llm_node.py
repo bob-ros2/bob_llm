@@ -246,6 +246,7 @@ class LLMNode(Node):
         self._is_generating = False
         self._cancel_requested = False
         self._prompt_queue = deque()
+        self._stream_buffer = ''
 
         self.sub = self.create_subscription(
             String, 'llm_prompt', self.prompt_callback, DEFAULT_QUEUE_SIZE,
@@ -648,52 +649,88 @@ class LLMNode(Node):
                 })
 
     def _generate_stream(self, tool_choice):
-        """Process LLM generation in streaming mode. Returns (resp, reasoning, tools)."""
+        """
+        Process LLM generation in streaming mode.
+        Returns (resp, reasoning, tools).
+        """
         full_response = ''
         full_reasoning = ''
         tool_calls_chunks = {}  # index -> {id, name, arguments_str}
 
-        async_stream = self.llm_client.process_prompt_stream(
-            self.chat_history,
-            tools=self.tools if self.tools else None,
-            tool_choice=tool_choice
-        )
+        retry_count = 0
+        max_retries = 1  # Minimal retry for early failures
 
-        for chunk in async_stream:
-            if self._cancel_requested:
-                return None, None, None
+        while retry_count <= max_retries:
+            try:
+                async_stream = self.llm_client.process_prompt_stream(
+                    self.chat_history,
+                    tools=self.tools if self.tools else None,
+                    tool_choice=tool_choice
+                )
 
-            if isinstance(chunk, dict):
-                content = chunk.get('content')
-                reasoning = chunk.get('reasoning')
-                t_calls = chunk.get('tool_calls')
+                for chunk in async_stream:
+                    if self._cancel_requested:
+                        return None, None, None
 
-                if reasoning is not None:
-                    full_reasoning += reasoning
-                    self.pub_reasoning.publish(String(data=reasoning))
-                if content is not None:
-                    full_response += content
-                    self.pub_stream.publish(String(data=content))
+                    if isinstance(chunk, dict):
+                        content = chunk.get('content')
+                        reasoning = chunk.get('reasoning')
+                        t_calls = chunk.get('tool_calls')
 
-                if t_calls:
-                    for tc in t_calls:
-                        idx = tc.get('index', 0)
-                        if idx not in tool_calls_chunks:
-                            tool_calls_chunks[idx] = {'id': '', 'name': '', 'args': ''}
-                        if tc.get('id'):
-                            tool_calls_chunks[idx]['id'] += tc['id']
-                        if tc.get('function'):
-                            f = tc['function']
-                            if f.get('name'):
-                                tool_calls_chunks[idx]['name'] += f['name']
-                            if f.get('arguments'):
-                                tool_calls_chunks[idx]['args'] += f['arguments']
+                        if reasoning is not None:
+                            full_reasoning += reasoning
+                            self.pub_reasoning.publish(String(data=reasoning))
+                        if content is not None:
+                            full_response += content
+                            self._stream_buffer += content
 
-            elif isinstance(chunk, str):
-                if chunk.startswith('[ERROR:'):
-                    self.get_logger().error(chunk)
-                full_response += chunk
-                self.pub_stream.publish(String(data=chunk))
+                            # Publish if we hit a boundary (space, punctuation, newline) 
+                            # or buffer gets too long (e.g. 15 chars)
+                            if any(c in content for c in ' \t\n.,!?;:') or len(self._stream_buffer) > 15:
+                                self.pub_stream.publish(String(data=self._stream_buffer))
+                                self._stream_buffer = ''
+
+                        if t_calls:
+                            for tc in t_calls:
+                                idx = tc.get('index', 0)
+                                if idx not in tool_calls_chunks:
+                                    tool_calls_chunks[idx] = {
+                                        'id': '', 'name': '', 'args': ''}
+                                if tc.get('id'):
+                                    tool_calls_chunks[idx]['id'] += tc['id']
+                                if tc.get('function'):
+                                    f = tc['function']
+                                    if f.get('name'):
+                                        tool_calls_chunks[idx]['name'] += f['name']
+                                    if f.get('arguments'):
+                                        tool_calls_chunks[idx]['args'] += f['arguments']
+
+                    elif isinstance(chunk, str):
+                        if chunk.startswith('[ERROR:'):
+                            # If we haven't received anything yet, we can retry
+                            if not full_response and not full_reasoning and retry_count < max_retries:
+                                self.get_logger().warn(
+                                    f'Stream error, retrying ({retry_count + 1}/{max_retries})...')
+                                break
+                            self.get_logger().error(chunk)
+                            # Append error to response if it's already mid-stream
+                            if full_response:
+                                full_response += f'\n\n{chunk}'
+                        else:
+                            full_response += chunk
+                            self.pub_stream.publish(String(data=chunk))
+
+                # Success or non-retriable error
+                break
+
+            except Exception as e:
+                self.get_logger().error(f'Critical stream processing error: {e}')
+                if not full_response and not full_reasoning and retry_count < max_retries:
+                    retry_count += 1
+                    continue
+                break
+            finally:
+                retry_count += 1
 
         # Convert chunks to standard tool_calls format
         tool_calls = []
@@ -707,6 +744,11 @@ class LLMNode(Node):
                     'arguments': tc['args']
                 }
             })
+
+        # Final flush of stream buffer
+        if self._stream_buffer:
+            self.pub_stream.publish(String(data=self._stream_buffer))
+            self._stream_buffer = ''
 
         return full_response, full_reasoning, tool_calls
 

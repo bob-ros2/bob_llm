@@ -189,13 +189,17 @@ class OpenAICompatibleClient:
             )
             response.raise_for_status()
 
-            # Standard SSE line-by-line processing (each line is typically one token)
-            for line in response.iter_lines(delimiter=b'\n'):
+            # Using iter_lines with decode_unicode=False to handle bytes manually
+            # and avoid decoding partial multi-byte characters at chunk boundaries.
+            for line in response.iter_lines(decode_unicode=False, delimiter=b'\n'):
                 if not line:
                     continue
 
-                # Strip and decode the full line to ensure UTF-8 integrity
-                line_str = line.decode('utf-8', errors='replace').strip()
+                try:
+                    line_str = line.decode('utf-8').strip()
+                except UnicodeDecodeError:
+                    # If decoding fails, it's likely a partial chunk or binary noise
+                    continue
 
                 if line_str.startswith('data: '):
                     data_str = line_str[6:].strip()
