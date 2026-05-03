@@ -829,12 +829,6 @@ class LLMNode(Node):
 
     def prompt_callback(self, msg):
         """Handle incoming prompts via a non-blocking queue."""
-        # Safety: Keep only the latest prompts to avoid massive backlog
-        if len(self._prompt_queue) > 5:
-            self.get_logger().warn('Prompt queue too long, dropping oldest message.')
-            self._prompt_queue.popleft()
-
-        self._prompt_queue.append(msg)
         # --- Cancellation Check ---
         stop_list = self.get_parameter('stop').value
         if msg.data in stop_list:
@@ -847,6 +841,11 @@ class LLMNode(Node):
 
         # --- Busy Check ---
         if self._is_generating:
+            # Safety: Keep only the latest prompts to avoid massive backlog
+            if len(self._prompt_queue) > 5:
+                self.get_logger().warn('Prompt queue too long, dropping oldest message.')
+                self._prompt_queue.popleft()
+
             self._prompt_queue.append(msg.data)
             self.get_logger().info(f'Queued prompt. Queue size: {len(self._prompt_queue)}')
             return
