@@ -27,6 +27,9 @@
     # Controls tool calling behavior ('auto', 'none', 'required', or a specific tool name).
     tool_choice: 'auto'
 
+    # Maximum time in seconds to wait for a tool to execute.
+    tool_timeout: 60.0
+
     # If true, processes image_url in JSON prompts by base64 encoding the image.
     process_image_urls: false
 
@@ -39,6 +42,9 @@
     api_url: 'http://localhost:8000/v1'
     api_key: 'no_key'
     api_model: 'gpt-oss'
+    api_timeout: 120.0
+    
+    # Generation parameters
     stream: true
     temperature: 0.7
     top_p: 1.0
@@ -46,6 +52,13 @@
     stop: ['stop_llm']
     presence_penalty: 0.0
     frequency_penalty: 0.0
+
+    # JSON string defining the output format (e.g. '{"type": "json_object"}')
+    response_format: ""
+
+    # If set, appends conversation turns to this JSON file.
+    message_log: ""
+
     # Optional string to publish on llm_stream when generation is finished.
     eof: ''
     
