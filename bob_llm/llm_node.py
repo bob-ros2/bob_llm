@@ -674,7 +674,7 @@ class LLMNode(Node):
                 try:
                     result = future.result(timeout=timeout)
                     content_str = (result if isinstance(result, str)
-                                   else json.dumps(result, ensure_ascii=False))
+                                   else json.dumps(result, ensure_ascii=False, default=str))
                 except TimeoutError:
                     content_str = f"Error: Tool '{func_name}' timed out after {timeout}s."
                     self.get_logger().error(content_str)
@@ -711,7 +711,7 @@ class LLMNode(Node):
         tool_calls_chunks = {}  # index -> {id, name, arguments_str}
 
         retry_count = 0
-        max_retries = 1  # Minimal retry for early failures
+        max_retries = 3  # Increased for better initial connection robustness
 
         while retry_count <= max_retries:
             try:
@@ -828,7 +828,13 @@ class LLMNode(Node):
         return full_response, full_reasoning, tool_calls
 
     def prompt_callback(self, msg):
-        """Process an incoming prompt from the 'llm_prompt' topic."""
+        """Handle incoming prompts via a non-blocking queue."""
+        # Safety: Keep only the latest prompts to avoid massive backlog
+        if len(self._prompt_queue) > 5:
+            self.get_logger().warn('Prompt queue too long, dropping oldest message.')
+            self._prompt_queue.popleft()
+
+        self._prompt_queue.append(msg)
         # --- Cancellation Check ---
         stop_list = self.get_parameter('stop').value
         if msg.data in stop_list:
