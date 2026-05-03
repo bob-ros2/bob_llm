@@ -311,7 +311,8 @@ class LLMNode(Node):
                 self._user_turns_count = sum(
                     1 for m in initial_messages if m.get('role') == 'user')
                 self.get_logger().info(
-                    f'Loaded {len(initial_messages)} initial messages ({self._user_turns_count} user turns).')
+                    f'Loaded {len(initial_messages)} messages '
+                    f'({self._user_turns_count} user turns).')
         except json.JSONDecodeError:
             self.get_logger().error(
                 "Failed to parse 'initial_messages_json'.")
@@ -491,6 +492,7 @@ class LLMNode(Node):
     def _trim_chat_history(self):
         """
         Prevent the chat history from growing indefinitely.
+
         Trims oldest turns after the prefix to stay within max_history_length.
         """
         max_len = self.get_parameter('max_history_length').value
