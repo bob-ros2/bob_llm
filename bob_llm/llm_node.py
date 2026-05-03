@@ -14,6 +14,7 @@
 
 import base64
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import importlib
 import importlib.util
 import json
@@ -214,6 +215,11 @@ class LLMNode(Node):
             ParameterType.PARAMETER_STRING,
             "Tool calling behavior ('auto', 'none', 'required').")
 
+        self._declare_param(
+            'tool_timeout', 'LLM_TOOL_TIMEOUT', 60.0,
+            ParameterType.PARAMETER_DOUBLE,
+            'Maximum time in seconds to wait for a tool to execute.')
+
         share_dir = get_package_share_directory('bob_llm')
         default_skill_dir = os.path.join(share_dir, 'config', 'skills')
 
@@ -247,6 +253,7 @@ class LLMNode(Node):
         self._cancel_requested = False
         self._prompt_queue = deque()
         self._stream_buffer = ''
+        self._executor = ThreadPoolExecutor(max_workers=5)
 
         self.sub = self.create_subscription(
             String, 'llm_prompt', self.prompt_callback, DEFAULT_QUEUE_SIZE,
@@ -656,9 +663,16 @@ class LLMNode(Node):
                     'id': tool_call_id
                 })))
 
-                result = func_to_call(**args)
-                content_str = (result if isinstance(result, str)
-                               else json.dumps(result, ensure_ascii=False))
+                # Execute tool with timeout
+                timeout = self.get_parameter('tool_timeout').value
+                future = self._executor.submit(func_to_call, **args)
+                try:
+                    result = future.result(timeout=timeout)
+                    content_str = (result if isinstance(result, str)
+                                   else json.dumps(result, ensure_ascii=False))
+                except TimeoutError:
+                    content_str = f"Error: Tool '{func_name}' timed out after {timeout}s."
+                    self.get_logger().error(content_str)
 
                 self.chat_history.append({
                     'tool_call_id': tool_call_id,
@@ -667,12 +681,13 @@ class LLMNode(Node):
                     'content': content_str
                 })
             except Exception as e:
-                self.get_logger().error(f'Tool {func_name} failed: {e}')
+                err_msg = f"Error: Tool execution failed: {e}"
+                self.get_logger().error(err_msg)
                 self.chat_history.append({
                     'tool_call_id': tool_call_id,
                     'role': 'tool',
                     'name': func_name,
-                    'content': str(e)
+                    'content': err_msg
                 })
 
     def _generate_stream(self, tool_choice):
