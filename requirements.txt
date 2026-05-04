@@ -1,6 +1,6 @@
 requests
 # When using qdrant_tools.py
 qdrant-client
-# When using chat.py
+# When using chat_node.py
 prompt_toolkit
 rich
