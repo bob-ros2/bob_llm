@@ -14,7 +14,10 @@
 
 import base64
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    TimeoutError as FutureTimeoutError
+)
 import importlib
 import importlib.util
 import json
@@ -675,7 +678,7 @@ class LLMNode(Node):
                     result = future.result(timeout=timeout)
                     content_str = (result if isinstance(result, str)
                                    else json.dumps(result, ensure_ascii=False, default=str))
-                except TimeoutError:
+                except FutureTimeoutError:
                     content_str = f"Error: Tool '{func_name}' timed out after {timeout}s."
                     self.get_logger().error(content_str)
 

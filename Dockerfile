@@ -4,6 +4,8 @@ FROM ros:${ROS_DISTRO}-ros-base
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV SHELL=/bin/bash
+SHELL ["/bin/bash", "-c"]
+ENV PATH="/home/ros/.local/bin:${PATH}"
 
 # -- Install System Dependencies --
 RUN apt-get update && apt-get install -y \
@@ -33,7 +35,7 @@ RUN rosdep update && \
     sudo rm -rf /var/lib/apt/lists/*
 
 # -- Build the Workspace --
-RUN . /opt/ros/${ROS_DISTRO}/setup.sh && \
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash && \
     colcon build --symlink-install --packages-select bob_llm
 
 # -- Entrypoint Script --
