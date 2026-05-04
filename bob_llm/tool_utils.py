@@ -20,7 +20,7 @@ from typing import Any, Dict, List, TypedDict
 class FunctionParameters(TypedDict):
     """Parameters for a function definition."""
 
-    type: str
+    type: str  # noqa: A003
     properties: Dict[str, Any]
     required: List[str]
 
@@ -36,7 +36,7 @@ class FunctionDefinition(TypedDict):
 class Tool(TypedDict):
     """OpenAI-compatible tool definition."""
 
-    type: str
+    type: str  # noqa: A003
     function: FunctionDefinition
 
 
