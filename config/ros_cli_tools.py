@@ -20,6 +20,7 @@ from typing import Any, List
 from bob_llm.tool_utils import register as default_register
 from bob_llm.tool_utils import Tool
 import rclpy
+from rclpy.parameter import Parameter
 import yaml
 
 
@@ -168,7 +169,7 @@ def set_parameter(node_name: str, param_name: str, value: str) -> str:
         try:
             # Use yaml.safe_load to infer type (int, float, bool, etc.) from the string value
             typed_value = yaml.safe_load(value)
-            new_param = rclpy.parameter.Parameter(param_name, value=typed_value)
+            new_param = Parameter(param_name, value=typed_value)
             _NodeContext.node.set_parameters([new_param])
             return (f"Successfully set parameter '{param_name}' on "
                     f"node '{node_name}' to {value}.")
