@@ -42,35 +42,43 @@ def register(module: Any, node: Any = None) -> List[Tool]:
     return default_register(module, node)
 
 
-def _get_skill_dir() -> str:
-    """Get the skill directory from ROS parameters or use default."""
+def _get_skill_dirs() -> List[str]:
+    """Get the list of skill directories from ROS parameters or use default."""
+    paths_str = './config/skills'
     if _NodeContext.node:
         try:
             param = _NodeContext.node.get_parameter('skill_dir')
-            if param:
-                return param.value
+            if param and param.value:
+                paths_str = param.value
         except rclpy.exceptions.ParameterNotDeclaredException:
             pass
-    return './config/skills'
+
+    # Split by comma and remove empty strings/whitespace
+    return [p.strip() for p in paths_str.split(',') if p.strip()]
 
 
 # --- Tool Definitions ---
 
 def list_skills() -> str:
-    """List all available skills in the skill directory."""
-    skill_dir = _get_skill_dir()
-    if not os.path.exists(skill_dir):
-        return f'Skill directory {skill_dir} does not exist.'
-    try:
-        skills = []
-        for d in os.listdir(skill_dir):
-            if os.path.isdir(os.path.join(skill_dir, d)):
-                skills.append(d)
-        if not skills:
-            return 'No skills found.'
-        return f'Available skills: {", ".join(skills)}'
-    except Exception as e:
-        return f'Error listing skills: {e}'
+    """List all available skills across all skill directories."""
+    skill_dirs = _get_skill_dirs()
+    all_skills = set()
+
+    # Collect unique skills from all configured directories
+    for skill_dir in skill_dirs:
+        if os.path.exists(skill_dir):
+            try:
+                for d in os.listdir(skill_dir):
+                    if os.path.isdir(os.path.join(skill_dir, d)):
+                        all_skills.add(d)
+            except Exception:
+                pass
+
+    if not all_skills:
+        return f'No skills found in directories: {", ".join(skill_dirs)}'
+
+    # Return sorted list for consistent output
+    return f'Available skills: {", ".join(sorted(all_skills))}'
 
 
 def read_skill_file(skill_name: str, filename: str) -> str:
@@ -80,15 +88,20 @@ def read_skill_file(skill_name: str, filename: str) -> str:
     :param skill_name: The name of the skill.
     :param filename: The name of the file to read (e.g. \'SKILL.md\').
     """
-    skill_dir = _get_skill_dir()
-    path = os.path.join(skill_dir, skill_name, filename)
-    if not os.path.exists(path):
-        return f'Error: File {filename} not found in skill {skill_name}.'
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except Exception as e:
-        return f'Error reading file: {e}'
+    skill_dirs = _get_skill_dirs()
+
+    # Search through directories in order; return the first match
+    for skill_dir in skill_dirs:
+        path = os.path.join(skill_dir, skill_name, filename)
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except Exception as e:
+                return f'Error reading file: {e}'
+
+    return (f'Error: File {filename} not found in skill {skill_name} '
+            'across any configured directory.')
 
 
 def write_skill_file(skill_name: str, filename: str, content: str) -> str:
@@ -101,12 +114,25 @@ def write_skill_file(skill_name: str, filename: str, content: str) -> str:
     :param filename: The name of the file to write.
     :param content: The content to write to the file.
     """
-    skill_dir = _get_skill_dir()
-    path = os.path.join(skill_dir, skill_name)
+    skill_dirs = _get_skill_dirs()
+    if not skill_dirs:
+        return "Error: No skill directories configured."
 
-    # Check for write permissions in the base directory
-    if os.path.exists(skill_dir) and not os.access(skill_dir, os.W_OK):
-        return (f"Error: Directory '{skill_dir}' is READ-ONLY. "
+    # If multiple paths exist, protect the 'core' skills from being overwritten.
+    # The agent is only allowed to write to the very last directory in the list.
+    if len(skill_dirs) > 1:
+        for core_dir in skill_dirs[:-1]:
+            core_path = os.path.join(core_dir, skill_name)
+            if os.path.exists(core_path):
+                return "Error: Core skills are protected and cannot be modified."
+
+    # Always write to the last configured directory
+    target_dir = skill_dirs[-1]
+    path = os.path.join(target_dir, skill_name)
+
+    # Check for write permissions in the target directory
+    if os.path.exists(target_dir) and not os.access(target_dir, os.W_OK):
+        return (f"Error: Directory '{target_dir}' is READ-ONLY. "
                 'To enable writing skills, either change permissions or '
                 "set the 'skill_dir' parameter to a writable path.")
 
@@ -136,9 +162,17 @@ def execute_skill_script(skill_name: str, script_path: str, args: str = '') -> s
     :param script_path: The relative path to the script within the skill (e.g. \'scripts/run.sh\').
     :param args: Optional arguments to pass to the script as a single string.
     """
-    skill_dir = _get_skill_dir()
-    full_path = os.path.join(skill_dir, skill_name, script_path)
-    if not os.path.exists(full_path):
+    skill_dirs = _get_skill_dirs()
+
+    full_path = None
+    # Search through directories in order for the executable script
+    for skill_dir in skill_dirs:
+        potential_path = os.path.join(skill_dir, skill_name, script_path)
+        if os.path.exists(potential_path):
+            full_path = potential_path
+            break
+
+    if not full_path:
         return f'Error: Script {script_path} not found in skill {skill_name}.'
 
     try:

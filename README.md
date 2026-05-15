@@ -183,7 +183,7 @@ The node is configured through a ROS parameters YAML file. Most parameters suppo
 | `presence_penalty` | double | `0.0` | Penalizes new tokens based on presence. [ENV: LLM_PRESENCE_PENALTY] Range: [-2.0, 2.0]|
 | `frequency_penalty`| double | `0.0` | Penalizes new tokens based on frequency. [ENV: LLM_FREQUENCY_PENALTY] Range: [-2.0, 2.0]|
 | `tool_interfaces` | string array | `[]` | A list of Python modules or file paths to load as tools. [ENV: LLM_TOOL_INTERFACES] |
-| `skill_dir` | string | `./config/skills` | Directory where skills are stored. [ENV: LLM_SKILL_DIR] |
+| `skill_dir` | string | `./config/skills` | Directory where skills are stored. Supports a comma-separated list of paths for dual-loading. [ENV: LLM_SKILL_DIR] |
 | `message_log` | string | `""` | If set, appends conversation turns to this JSON file. [ENV: LLM_MESSAGE_LOG] |
 | `response_format` | string | `""` | JSON string defining the output format. [ENV: LLM_RESPONSE_FORMAT] |
 | `tool_timeout` | double | `60.0` | Maximum time in seconds to wait for a tool to execute. [ENV: LLM_TOOL_TIMEOUT] |
@@ -242,6 +242,13 @@ The `bob_llm` node implements the [Anthropic Agent Skills](https://agentskills.i
 Add the path of `config/skill_tools.py` to your `tool_interfaces` to enable the skill discovery API (`load_skill_info`, `execute_skill_script`, etc.).
 
 **Configuration:** Ensure the `skill_dir` parameter points to a valid directory where your Agentskills are stored. A sample collection of skills is provided in the `./config/skills` directory of the package.
+
+**Dual Skill Loading Architecture:**
+The `skill_dir` parameter supports a comma-separated list of paths (e.g., `/ros2_ws/src/core_skills,/home/user/learned_skills`). 
+When multiple paths are provided:
+- The node will seamlessly merge and load skills from all configured directories.
+- The agent is strictly prevented from overwriting or deleting skills that reside in any "core" directory (all paths except the last one).
+- New skills created by the agent will always be written exclusively to the *last* directory in the list, allowing for a protected core and a writable memory sandbox.
 
 #### 2. Ready-to-use Tools
 - **ROS CLI Tools (`config/ros_cli_tools.py`):** Inspect and control the ROS system.
