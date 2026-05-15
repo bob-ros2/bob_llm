@@ -92,7 +92,7 @@ Interact with Bob through a dedicated, interactive terminal client.
 # Start standard chat
 ros2 run bob_llm chat
 
-# Start with premium boxed UI (visual panels)
+# Start with boxed UI (visual panels)
 ros2 run bob_llm chat --panels
 ```
 
@@ -113,12 +113,6 @@ The chat client supports the following ROS parameters and environment variables:
 
 - **`queue_size` (Integer)**: ROS parameter to control the subscription queue depth. 
 - **`CHAT_QUEUE_SIZE` (Environment Variable)**: Default value for the `queue_size` parameter (default: `1000`).
-
-Example usage:
-```bash
-export CHAT_QUEUE_SIZE=2000
-ros2 run bob_llm chat --topic_in /user_query --topic_out /llm_stream --panels
-```
 
 #### Chat Example
 
