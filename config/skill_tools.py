@@ -116,7 +116,7 @@ def write_skill_file(skill_name: str, filename: str, content: str) -> str:
     """
     skill_dirs = _get_skill_dirs()
     if not skill_dirs:
-        return "Error: No skill directories configured."
+        return 'Error: No skill directories configured.'
 
     # If multiple paths exist, protect the 'core' skills from being overwritten.
     # The agent is only allowed to write to the very last directory in the list.
@@ -124,7 +124,7 @@ def write_skill_file(skill_name: str, filename: str, content: str) -> str:
         for core_dir in skill_dirs[:-1]:
             core_path = os.path.join(core_dir, skill_name)
             if os.path.exists(core_path):
-                return "Error: Core skills are protected and cannot be modified."
+                return 'Error: Core skills are protected and cannot be modified.'
 
     # Always write to the last configured directory
     target_dir = skill_dirs[-1]
