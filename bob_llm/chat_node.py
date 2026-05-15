@@ -201,27 +201,27 @@ def main(args=None):
     parser = argparse.ArgumentParser(description='Bob LLM Chat Client')
     parser.add_argument(
         '--topic_in', default='llm_prompt',
-        help='ROS Topic to send prompts to'
+        help='ROS Topic to send prompts to (default: llm_prompt)'
     )
     parser.add_argument(
         '--topic_out', default='llm_stream',
-        help='ROS Topic to receive streamed responses'
+        help='ROS Topic to receive streamed responses (default: llm_stream)'
     )
     parser.add_argument(
         '--topic_response', default='llm_response',
-        help='ROS Topic to receive final complete responses'
+        help='ROS Topic to receive final complete responses (default: llm_response)'
     )
     parser.add_argument(
         '--topic_tools', default='llm_tool_calls',
-        help='ROS Topic to receive tool call notifications'
+        help='ROS Topic to receive tool call notifications (default: llm_tool_calls)'
     )
     parser.add_argument(
         '--topic_reasoning', default='llm_reasoning',
-        help='ROS Topic to receive model reasoning content'
+        help='ROS Topic to receive model reasoning content (default: llm_reasoning)'
     )
     parser.add_argument(
         '--panels', action='store_true',
-        help='Enable premium boxed UI (default: off)'
+        help='Enable boxed UI (default: off)'
     )
     parsed_args, ros_args = parser.parse_known_args(sys.argv[1:])
 

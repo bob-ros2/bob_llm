@@ -98,14 +98,25 @@ ros2 run bob_llm chat --panels
 
 #### CLI Arguments for `chat`
 
-| Option | Default | Description |
-| :--- | :--- | :--- |
-| `--topic_in` | `llm_prompt` | ROS Topic to send prompts to. |
-| `--topic_out` | `llm_stream` | ROS Topic to receive streamed chunks. |
-| `--topic_reasoning` | `llm_reasoning` | ROS Topic to receive model reasoning content. |
-| `--topic_response` | `llm_response` | ROS Topic to receive final complete responses. |
-| `--topic_tools` | `llm_tool_calls` | Topic for skill execution feedback. |
-| `--panels` | `False` | Enable decorative boxes around messages. |
+```text
+usage: ros2 run bob_llm chat [-h] [--topic_in TOPIC_IN] [--topic_out TOPIC_OUT]
+                             [--topic_response TOPIC_RESPONSE]
+                             [--topic_tools TOPIC_TOOLS]
+                             [--topic_reasoning TOPIC_REASONING] [--panels]
+
+options:
+  -h, --help            show this help message and exit
+  --topic_in TOPIC_IN   ROS Topic to send prompts to (default: llm_prompt)
+  --topic_out TOPIC_OUT
+                        ROS Topic to receive streamed responses (default: llm_stream)
+  --topic_response TOPIC_RESPONSE
+                        ROS Topic to receive final complete responses (default: llm_response)
+  --topic_tools TOPIC_TOOLS
+                        ROS Topic to receive tool call notifications (default: llm_tool_calls)
+  --topic_reasoning TOPIC_REASONING
+                        ROS Topic to receive model reasoning content (default: llm_reasoning)
+  --panels              Enable boxed UI (default: off)
+```
 
 #### Chat Configuration
 
