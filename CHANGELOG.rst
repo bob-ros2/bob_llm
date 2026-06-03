@@ -5,6 +5,8 @@ Changelog for package bob_llm
 
 1.0.3 (2026-04-30)
 ------------------
+* Add statistics publishing on llm_stats topic.
+* Fix missing tool docstring issue.
 * Refactor monolithic prompt processing into event-driven architecture (removed polling timer).
 * Implement O(n) chat history trimming for improved performance during long conversations.
 * Add robust stream recovery with automatic retry for failed API connections.

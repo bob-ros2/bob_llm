@@ -34,7 +34,8 @@ class OpenAICompatibleClient:
         presence_penalty: float = 0.0,
         frequency_penalty: float = 0.0,
         timeout: float = 60.0,
-        response_format: dict = None
+        response_format: dict = None,
+        stream_options_include_usage: bool = True
     ):
         """
         Initialize the OpenAICompatibleClient.
@@ -68,6 +69,9 @@ class OpenAICompatibleClient:
         self.frequency_penalty = frequency_penalty
         self.timeout = timeout
         self.response_format = response_format
+        self.stream_options_include_usage = (
+            stream_options_include_usage
+        )
 
     def _build_payload(
         self,
@@ -138,6 +142,10 @@ class OpenAICompatibleClient:
 
         if stream:
             payload['stream'] = True
+            if self.stream_options_include_usage:
+                payload['stream_options'] = {
+                    'include_usage': True
+                }
 
         return payload
 
@@ -159,7 +167,10 @@ class OpenAICompatibleClient:
                 timeout=self.timeout
             )
             response.raise_for_status()
-            message = response.json()['choices'][0]['message']
+            response_json = response.json()
+            message = response_json['choices'][0]['message']
+            if 'usage' in response_json:
+                message['usage'] = response_json['usage']
             return True, message
         except requests.exceptions.RequestException as e:
             error_msg = f'API request failed: {e}'
@@ -205,21 +216,31 @@ class OpenAICompatibleClient:
                         return
                     try:
                         data_json = json.loads(data_str)
-                        if 'choices' in data_json and len(data_json['choices']) > 0:
-                            delta = data_json['choices'][0].get('delta', {})
+                        usage = data_json.get('usage')
+                        content = None
+                        reasoning = None
+                        t_calls = None
+
+                        choices = data_json.get('choices', [])
+                        if choices and len(choices) > 0:
+                            delta = choices[0].get('delta', {})
                             content = delta.get('content')
-                            reasoning = (delta.get('reasoning_content') or
-                                         delta.get('reasoning'))
+                            reasoning = (
+                                delta.get('reasoning_content') or
+                                delta.get('reasoning')
+                            )
                             t_calls = delta.get('tool_calls')
 
-                            if (content is not None or
-                                    reasoning is not None or
-                                    t_calls is not None):
-                                yield {
-                                    'content': content,
-                                    'reasoning': reasoning,
-                                    'tool_calls': t_calls
-                                }
+                        if (content is not None or
+                                reasoning is not None or
+                                t_calls is not None or
+                                usage is not None):
+                            yield {
+                                'content': content,
+                                'reasoning': reasoning,
+                                'tool_calls': t_calls,
+                                'usage': usage
+                            }
                     except json.JSONDecodeError:
                         continue
 

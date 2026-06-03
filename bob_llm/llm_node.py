@@ -231,6 +231,28 @@ class LLMNode(Node):
             ParameterType.PARAMETER_STRING,
             'Directory where skills are stored.')
 
+        self._declare_param(
+            'model_context_limit', 'LLM_MODEL_CONTEXT_LIMIT', 8192,
+            ParameterType.PARAMETER_INTEGER,
+            'The total context window size (limit) of the model in tokens.')
+
+        self._declare_param(
+            'stream_options_include_usage',
+            'LLM_STREAM_OPTIONS_INCLUDE_USAGE', True,
+            ParameterType.PARAMETER_BOOL,
+            'Request usage details from the API in the stream options.')
+
+        # Initialize tiktoken for token estimation fallback
+        try:
+            import tiktoken
+            api_model = self.get_parameter('api_model').value
+            try:
+                self._tokenizer = tiktoken.encoding_for_model(api_model)
+            except Exception:
+                self._tokenizer = tiktoken.get_encoding('cl100k_base')
+        except ImportError:
+            self._tokenizer = None
+
         # Cloak API Key: Read from parameter, store in private variable, and clear parameter.
         self._api_key = self.get_parameter('api_key').value
         if self._api_key and self._api_key != 'no_key':
@@ -275,6 +297,8 @@ class LLMNode(Node):
             String, 'llm_latest_turn', DEFAULT_QUEUE_SIZE)
         self.pub_tool_calls = self.create_publisher(
             String, 'llm_tool_calls', DEFAULT_QUEUE_SIZE)
+        self.pub_stats = self.create_publisher(
+            String, 'llm_stats', DEFAULT_QUEUE_SIZE)
 
         # Register parameter update callback
         self.add_on_set_parameters_callback(self.on_params_changed)
@@ -375,9 +399,14 @@ class LLMNode(Node):
                 max_tokens=self.get_parameter('max_tokens').value,
                 stop=stop,
                 presence_penalty=self.get_parameter('presence_penalty').value,
-                frequency_penalty=self.get_parameter('frequency_penalty').value,
+                frequency_penalty=self.get_parameter(
+                    'frequency_penalty'
+                ).value,
                 timeout=self.get_parameter('api_timeout').value,
-                response_format=response_format
+                response_format=response_format,
+                stream_options_include_usage=self.get_parameter(
+                    'stream_options_include_usage'
+                ).value
             )
         else:
             self.get_logger().error(f'Unsupported API type: {api_type}')
@@ -551,6 +580,83 @@ class LLMNode(Node):
             return ' '.join(texts).strip()
         return str(content)
 
+    def _count_tokens(self, text: str) -> int:
+        """Count tokens in a string using tiktoken with fallback estimation."""
+        if not text:
+            return 0
+        if hasattr(self, '_tokenizer') and self._tokenizer:
+            try:
+                return len(self._tokenizer.encode(text))
+            except Exception:
+                pass
+        # Fallback estimation (~4 characters per token)
+        return max(1, len(text) // 4)
+
+    def _count_history_tokens(self, history: list) -> int:
+        """Count tokens in conversation history."""
+        total_tokens = 0
+        for msg in history:
+            content = msg.get('content', '')
+            total_tokens += self._count_tokens(self._get_message_text(content))
+            # Role overhead
+            total_tokens += 4
+        total_tokens += 3  # Final prompt overhead
+        return total_tokens
+
+    def _publish_stats(
+        self,
+        prompt_tokens: int,
+        completion_tokens: int,
+        tokens_per_second: float,
+        status: str = 'generating'
+    ):
+        """
+        Publish LLM execution stats in JSON format to the 'llm_stats' topic.
+
+        :param prompt_tokens: Number of context/prompt tokens.
+        :param completion_tokens: Number of generated completion tokens.
+        :param tokens_per_second: Rate of token generation.
+        :param status: String representing the status ("generating", etc).
+        """
+        context_limit = self.get_parameter('model_context_limit').value
+        max_tokens_val = self.get_parameter('max_tokens').value
+        max_tokens_str = str(max_tokens_val) if max_tokens_val > 0 else '∞'
+
+        if context_limit > 0:
+            prompt_percent = int(round((prompt_tokens / context_limit) * 100))
+        else:
+            prompt_percent = 0
+
+        tps_str = (
+            f'{tokens_per_second:.1f}'
+            if tokens_per_second is not None
+            else '0.0'
+        )
+
+        formatted = (
+            f'Context: {prompt_tokens}/{context_limit} ({prompt_percent}%) '
+            f'Output: {completion_tokens}/{max_tokens_str} {tps_str} t/s'
+        )
+
+        stats_data = {
+            'prompt_tokens': prompt_tokens,
+            'context_limit': context_limit,
+            'context_percent': prompt_percent,
+            'completion_tokens': completion_tokens,
+            'max_tokens': max_tokens_val if max_tokens_val > 0 else None,
+            'tokens_per_second': tokens_per_second,
+            'status': status,
+            'formatted': formatted
+        }
+
+        try:
+            self.pub_stats.publish(String(data=json.dumps(stats_data)))
+        except Exception as e:
+            self.get_logger().error(f'Failed to publish execution stats: {e}')
+
+        if status == 'completed':
+            self.get_logger().debug(formatted)
+
     def _process_image_url(self, image_url, text_content):
         """Process an image URL (file or http) and return a multimodal message content."""
         try:
@@ -707,14 +813,15 @@ class LLMNode(Node):
         """
         Process LLM generation in streaming mode.
 
-        Returns (resp, reasoning, tools).
+        Returns (resp, reasoning, tools, usage).
         """
         full_response = ''
         full_reasoning = ''
         tool_calls_chunks = {}  # index -> {id, name, arguments_str}
+        final_usage = None
 
         retry_count = 0
-        max_retries = 3  # Increased for better initial connection robustness
+        max_retries = 3
 
         while retry_count <= max_retries:
             try:
@@ -724,27 +831,94 @@ class LLMNode(Node):
                     tool_choice=tool_choice
                 )
 
+                request_start_time = self.get_clock().now().nanoseconds / 1e9
+                first_token_time = None
+                completion_tokens = 0
+                prompt_tokens = self._count_history_tokens(self.chat_history)
+
                 for chunk in async_stream:
                     if self._cancel_requested:
-                        return None, None, None
+                        return None, None, None, None
 
                     if isinstance(chunk, dict):
                         content = chunk.get('content')
                         reasoning = chunk.get('reasoning')
                         t_calls = chunk.get('tool_calls')
+                        usage = chunk.get('usage')
+
+                        if usage is not None:
+                            final_usage = usage
+                            if 'prompt_tokens' in usage:
+                                prompt_tokens = usage['prompt_tokens']
+                            if 'completion_tokens' in usage:
+                                completion_tokens = usage['completion_tokens']
+
+                            now_time = (
+                                self.get_clock().now().nanoseconds / 1e9
+                            )
+                            if first_token_time is not None:
+                                elapsed = now_time - first_token_time
+                                tps = (
+                                    completion_tokens / elapsed
+                                    if elapsed > 0 else 0.0
+                                )
+                            else:
+                                elapsed = now_time - request_start_time
+                                tps = (
+                                    completion_tokens / elapsed
+                                    if elapsed > 0 else 0.0
+                                )
+
+                            self._publish_stats(
+                                prompt_tokens,
+                                completion_tokens,
+                                tps,
+                                status='generating'
+                            )
 
                         if reasoning is not None:
+                            if first_token_time is None:
+                                first_token_time = (
+                                    self.get_clock().now().nanoseconds / 1e9
+                                )
                             full_reasoning += reasoning
-                            self.pub_reasoning.publish(String(data=reasoning))
+                            self.pub_reasoning.publish(
+                                String(data=reasoning)
+                            )
+
                         if content is not None:
+                            if first_token_time is None:
+                                first_token_time = (
+                                    self.get_clock().now().nanoseconds / 1e9
+                                )
                             full_response += content
                             self._stream_buffer += content
 
-                            # Publish if we hit a boundary (space, punctuation, newline)
-                            # or buffer gets too long (e.g. 15 chars)
+                            completion_tokens = self._count_tokens(
+                                full_response
+                            )
+                            now_time = (
+                                self.get_clock().now().nanoseconds / 1e9
+                            )
+                            elapsed = now_time - first_token_time
+                            tps = (
+                                completion_tokens / elapsed
+                                if elapsed > 0 else 0.0
+                            )
+
+                            self._publish_stats(
+                                prompt_tokens,
+                                completion_tokens,
+                                tps,
+                                status='generating'
+                            )
+
+                            # Publish if we hit a boundary
                             if any(c in content for c in ' \t\n.,!?;:') or \
                                     len(self._stream_buffer) > 15:
-                                self.pub_stream.publish(String(data=self._stream_buffer))
+                                self.pub_stream.publish(
+                                    String(data=self._stream_buffer)
+                                )
                                 self._stream_buffer = ''
 
                         if t_calls:
@@ -758,33 +932,68 @@ class LLMNode(Node):
                                 if tc.get('function'):
                                     f = tc['function']
                                     if f.get('name'):
-                                        tool_calls_chunks[idx]['name'] += f['name']
+                                        name = f['name']
+                                        tool_calls_chunks[idx]['name'] += name
                                     if f.get('arguments'):
-                                        tool_calls_chunks[idx]['args'] += f['arguments']
+                                        args = f['arguments']
+                                        tool_calls_chunks[idx]['args'] += args
 
                     elif isinstance(chunk, str):
                         if chunk.startswith('[ERROR:'):
                             # If we haven't received anything yet, we can retry
-                            should_retry = not full_response and not full_reasoning \
+                            should_retry = (
+                                not full_response and not full_reasoning
                                 and retry_count < max_retries
+                            )
                             if should_retry:
                                 self.get_logger().warn(
-                                    f'Stream error, retrying ({retry_count + 1}/{max_retries})...')
+                                    f'Stream error, retrying '
+                                    f'({retry_count + 1}/{max_retries})...'
+                                )
                                 break
                             self.get_logger().error(chunk)
-                            # Append error to response if it's already mid-stream
+                            # Append error to response if already mid-stream
                             if full_response:
                                 full_response += f'\n\n{chunk}'
                         else:
+                            if first_token_time is None:
+                                first_token_time = (
+                                    self.get_clock().now().nanoseconds / 1e9
+                                )
                             full_response += chunk
+
+                            completion_tokens = self._count_tokens(
+                                full_response
+                            )
+                            now_time = (
+                                self.get_clock().now().nanoseconds / 1e9
+                            )
+                            elapsed = now_time - first_token_time
+                            tps = (
+                                completion_tokens / elapsed
+                                if elapsed > 0 else 0.0
+                            )
+
+                            self._publish_stats(
+                                prompt_tokens,
+                                completion_tokens,
+                                tps,
+                                status='generating'
+                            )
                             self.pub_stream.publish(String(data=chunk))
 
                 # Success or non-retriable error
                 break
 
             except Exception as e:
-                self.get_logger().error(f'Critical stream processing error: {e}')
-                if not full_response and not full_reasoning and retry_count < max_retries:
+                self.get_logger().error(
+                    f'Critical stream processing error: {e}'
+                )
+                should_retry = (
+                    not full_response and not full_reasoning
+                    and retry_count < max_retries
+                )
+                if should_retry:
                     retry_count += 1
                     continue
                 break
@@ -809,10 +1018,36 @@ class LLMNode(Node):
             self.pub_stream.publish(String(data=self._stream_buffer))
             self._stream_buffer = ''
 
-        return full_response, full_reasoning, tool_calls
+        # Stream finished. Publish final stats.
+        now_time = self.get_clock().now().nanoseconds / 1e9
+        if first_token_time is not None:
+            elapsed = now_time - first_token_time
+            tps = (
+                completion_tokens / elapsed
+                if elapsed > 0 else 0.0
+            )
+        else:
+            elapsed = now_time - request_start_time
+            tps = (
+                completion_tokens / elapsed
+                if elapsed > 0 else 0.0
+            )
+
+        self._publish_stats(
+            prompt_tokens,
+            completion_tokens,
+            tps,
+            status='completed'
+        )
+
+        return full_response, full_reasoning, tool_calls, final_usage
 
     def _generate_sync(self, tool_choice):
-        """Process LLM generation in synchronous mode. Returns (resp, reasoning, tools)."""
+        """
+        Process LLM generation in synchronous mode.
+
+        Returns (resp, reasoning, tools, usage).
+        """
         success, response_message = self.llm_client.process_prompt(
             self.chat_history,
             self.tools if self.tools else None,
@@ -821,14 +1056,15 @@ class LLMNode(Node):
 
         if not success:
             self.get_logger().error(f'LLM request error: {response_message}')
-            return None, None, None
+            return None, None, None, None
 
         full_response = response_message.get('content', '')
         full_reasoning = (response_message.get('reasoning_content') or
                           response_message.get('reasoning') or '')
         tool_calls = response_message.get('tool_calls', [])
+        usage = response_message.get('usage')
 
-        return full_response, full_reasoning, tool_calls
+        return full_response, full_reasoning, tool_calls, usage
 
     def prompt_callback(self, msg):
         """Handle incoming prompts via a non-blocking queue."""
@@ -885,14 +1121,47 @@ class LLMNode(Node):
                         break
 
                     if stream_enabled:
-                        full_response, full_reasoning, tool_calls = \
+                        full_response, full_reasoning, tool_calls, usage = (
                             self._generate_stream(tool_choice)
+                        )
                     else:
-                        full_response, full_reasoning, tool_calls = \
+                        request_start_time = (
+                            self.get_clock().now().nanoseconds / 1e9
+                        )
+                        full_response, full_reasoning, tool_calls, usage = \
                             self._generate_sync(tool_choice)
+                        request_end_time = (
+                            self.get_clock().now().nanoseconds / 1e9
+                        )
+                        total_time = request_end_time - request_start_time
+
+                        if usage:
+                            prompt_tokens = usage.get('prompt_tokens', 0)
+                            completion_tokens = usage.get(
+                                'completion_tokens', 0
+                            )
+                        else:
+                            prompt_tokens = self._count_history_tokens(
+                                self.chat_history
+                            )
+                            completion_tokens = self._count_tokens(
+                                full_response or ''
+                            )
+
+                        tps = (
+                            completion_tokens / total_time
+                            if total_time > 0 else 0.0
+                        )
+                        self._publish_stats(
+                            prompt_tokens,
+                            completion_tokens,
+                            tps,
+                            status='completed'
+                        )
 
                     if full_response is None and not tool_calls:
                         # Error or cancellation in generation
+                        self._publish_stats(0, 0, 0.0, status='error')
                         break
 
                     # Update history with assistant turn
@@ -973,7 +1242,7 @@ class LLMNode(Node):
             elif param.name in [
                 'temperature', 'top_p', 'max_tokens', 'presence_penalty',
                 'frequency_penalty', 'api_timeout', 'stop', 'api_url',
-                'api_key', 'api_model', 'eof'
+                'api_key', 'api_model', 'eof', 'stream_options_include_usage'
             ]:
                 client_params_updated = True
             elif param.name == 'response_format':
@@ -1018,6 +1287,20 @@ class LLMNode(Node):
                         param.value.rstrip('/') + '/chat/completions')
                 elif param.name == 'api_model':
                     self.llm_client.model = param.value
+                    try:
+                        import tiktoken
+                        try:
+                            self._tokenizer = tiktoken.encoding_for_model(
+                                param.value
+                            )
+                        except Exception:
+                            self._tokenizer = tiktoken.get_encoding(
+                                'cl100k_base'
+                            )
+                    except ImportError:
+                        self._tokenizer = None
+                elif param.name == 'stream_options_include_usage':
+                    self.llm_client.stream_options_include_usage = param.value
                 elif param.name == 'api_key':
                     self.llm_client.api_key = param.value
                     if param.value:
