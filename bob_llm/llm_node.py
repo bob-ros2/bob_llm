@@ -232,7 +232,7 @@ class LLMNode(Node):
             'Directory where skills are stored.')
 
         self._declare_param(
-            'model_context_limit', 'LLM_MODEL_CONTEXT_LIMIT', 8192,
+            'model_context_limit', 'LLM_MODEL_CONTEXT_LIMIT', 0,
             ParameterType.PARAMETER_INTEGER,
             'The total context window size (limit) of the model in tokens.')
 
@@ -413,8 +413,169 @@ class LLMNode(Node):
                     'stream_options_include_usage'
                 ).value
             )
+
+            # Detect context limit if set to 0
+            context_limit = self.get_parameter('model_context_limit').value
+            if context_limit == 0:
+                fetched_limit = self._query_api_for_model_info(api_url, model)
+                if fetched_limit > 0:
+                    self.get_logger().info(
+                        f'Successfully retrieved model context limit '
+                        f'from API: {fetched_limit}'
+                    )
+                    self.set_parameters([
+                        rclpy.parameter.Parameter(
+                            'model_context_limit',
+                            rclpy.Parameter.Type.INTEGER,
+                            fetched_limit
+                        )
+                    ])
+                else:
+                    guessed_limit = self._estimate_context_limit(model)
+                    self.get_logger().info(
+                        f"Using estimated context limit for model '{model}': "
+                        f'{guessed_limit}'
+                    )
+                    self.set_parameters([
+                        rclpy.parameter.Parameter(
+                            'model_context_limit',
+                            rclpy.Parameter.Type.INTEGER,
+                            guessed_limit
+                        )
+                    ])
         else:
             self.get_logger().error(f'Unsupported API type: {api_type}')
+
+    def _query_api_for_model_info(self, api_url: str, model_name: str) -> int:
+        """
+        Query the API endpoint for model lists and properties to determine context limit.
+
+        Logs retrieved information as debug logs. Outputs warnings on failures.
+        :return: Context limit in tokens, or 0 if could not be determined.
+        """
+        base_url = api_url.rstrip('/')
+        headers = {}
+        if self._api_key and self._api_key != 'no_key':
+            headers['Authorization'] = f'Bearer {self._api_key}'
+
+        models_list_url = f'{base_url}/models'
+        model_detail_url = f'{base_url}/models/{model_name}'
+
+        models_data = None
+        model_detail = None
+        limit = 0
+
+        # Try fetching model list
+        try:
+            r = requests.get(models_list_url, headers=headers, timeout=5.0)
+            if r.status_code == 200:
+                models_data = r.json()
+                self.get_logger().debug(
+                    f'Fetched API Models: {json.dumps(models_data)}'
+                )
+            else:
+                self.get_logger().warn(
+                    f'Could not fetch models list (HTTP {r.status_code}) '
+                    f'from {models_list_url}'
+                )
+        except Exception as e:
+            self.get_logger().warn(
+                f'Failed to retrieve model list from {models_list_url}: {e}'
+            )
+
+        # Try fetching model detail
+        try:
+            r = requests.get(model_detail_url, headers=headers, timeout=5.0)
+            if r.status_code == 200:
+                model_detail = r.json()
+                self.get_logger().debug(
+                    f'Fetched API Model detail for {model_name}: '
+                    f'{json.dumps(model_detail)}'
+                )
+            else:
+                self.get_logger().debug(
+                    f'Model detail endpoint /models/{model_name} returned '
+                    f'HTTP {r.status_code}'
+                )
+        except Exception as e:
+            self.get_logger().debug(
+                f'Failed to retrieve model details from {model_detail_url}: {e}'
+            )
+
+        # Helper to recursively look for keys containing context/max tokens
+        def extract_limit(d):
+            if not isinstance(d, dict):
+                return 0
+            candidate_keys = [
+                'context_length', 'context_window', 'max_position_embeddings',
+                'max_position_embedding', 'context_len', 'context_size',
+                'max_tokens', 'max_ctx', 'ctx_len'
+            ]
+            for key in candidate_keys:
+                if key in d and isinstance(d[key], (int, float)) and d[key] > 0:
+                    return int(d[key])
+            for v in d.values():
+                if isinstance(v, dict):
+                    nested = extract_limit(v)
+                    if nested > 0:
+                        return nested
+            return 0
+
+        if model_detail:
+            limit = extract_limit(model_detail)
+        if (
+            limit == 0 and models_data and
+            isinstance(models_data.get('data'), list)
+        ):
+            for m in models_data['data']:
+                if isinstance(m, dict) and m.get('id') == model_name:
+                    limit = extract_limit(m)
+                    if limit > 0:
+                        break
+
+        return limit
+
+    def _estimate_context_limit(self, model_name: str) -> int:
+        """
+        Estimate model context limit based on the model name.
+
+        :param model_name: Name of the LLM model.
+        :return: Estimated context limit.
+        """
+        name = model_name.lower()
+        if 'gpt-4o' in name:
+            return 128000
+        elif 'gpt-4-turbo' in name:
+            return 128000
+        elif 'gpt-4' in name:
+            return 8192
+        elif 'gpt-3.5-turbo' in name:
+            return 16385
+        elif 'deepseek' in name:
+            return 64000
+        elif (
+            'llama-3.1' in name or 'llama3.1' in name or
+            'llama-3.2' in name or 'llama3.2' in name or
+            'llama-3.3' in name or 'llama3.3' in name
+        ):
+            return 128000
+        elif 'llama3' in name or 'llama-3' in name:
+            return 8192
+        elif 'llama2' in name or 'llama-2' in name:
+            return 4096
+        elif 'mistral' in name or 'mixtral' in name or 'codestral' in name:
+            return 32768
+        elif (
+            'phi-3' in name or 'phi3' in name or
+            'phi-4' in name or 'phi4' in name
+        ):
+            return 128000
+        elif 'gemini' in name:
+            return 1048576
+        elif 'claude-3' in name:
+            return 200000
+
+        return 8192
 
     def _load_tools(self) -> tuple:
         """

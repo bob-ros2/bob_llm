@@ -34,7 +34,9 @@ def ros_init():
 
 def test_token_counting(ros_init):
     """Test that token counting functions produce reasonable estimates."""
-    with patch('bob_llm.llm_node.LLMNode.add_on_set_parameters_callback'):
+    with patch('bob_llm.llm_node.LLMNode.add_on_set_parameters_callback'), \
+         patch('bob_llm.llm_node.LLMNode._query_api_for_model_info',
+               return_value=0):
         node = LLMNode()
 
     # If tiktoken loaded, it uses encoding. Fallback is max(1, len//4).
@@ -55,7 +57,9 @@ def test_token_counting(ros_init):
 
 def test_stats_formatting_and_publishing(ros_init):
     """Test JSON payload structure of execution stats."""
-    with patch('bob_llm.llm_node.LLMNode.add_on_set_parameters_callback'):
+    with patch('bob_llm.llm_node.LLMNode.add_on_set_parameters_callback'), \
+         patch('bob_llm.llm_node.LLMNode._query_api_for_model_info',
+               return_value=0):
         node = LLMNode()
 
     mock_pub = MagicMock()
@@ -106,7 +110,9 @@ def test_stats_formatting_and_publishing(ros_init):
 
 def test_stats_infinite_max_tokens(ros_init):
     """Test format output when max_tokens parameter is 0 (infinite)."""
-    with patch('bob_llm.llm_node.LLMNode.add_on_set_parameters_callback'):
+    with patch('bob_llm.llm_node.LLMNode.add_on_set_parameters_callback'), \
+         patch('bob_llm.llm_node.LLMNode._query_api_for_model_info',
+               return_value=0):
         node = LLMNode()
 
     mock_pub = MagicMock()
@@ -138,7 +144,9 @@ def test_stats_infinite_max_tokens(ros_init):
 
 def test_stats_mode_filtering(ros_init):
     """Test stats publishing filtering based on stats_mode parameter."""
-    with patch('bob_llm.llm_node.LLMNode.add_on_set_parameters_callback'):
+    with patch('bob_llm.llm_node.LLMNode.add_on_set_parameters_callback'), \
+         patch('bob_llm.llm_node.LLMNode._query_api_for_model_info',
+               return_value=0):
         node = LLMNode()
 
     mock_pub = MagicMock()
@@ -173,3 +181,46 @@ def test_stats_mode_filtering(ros_init):
     assert mock_pub.publish.called
 
     node.destroy_node()
+
+
+def test_auto_detection_and_estimation(ros_init):
+    """Test dynamic context limit query and fallback estimation."""
+    with patch('bob_llm.llm_node.LLMNode.add_on_set_parameters_callback'), \
+         patch('bob_llm.llm_node.LLMNode._query_api_for_model_info') \
+         as mock_query:
+
+        # Test Case 1: Successful retrieval from API
+        mock_query.return_value = 16384
+        node = LLMNode()
+        assert node.get_parameter('model_context_limit').value == 16384
+        node.destroy_node()
+
+        # Test Case 2: Failed API retrieval, falls back to estimation
+        mock_query.return_value = 0
+        # Patch api_model parameter to return a deepseek name
+        with patch('rclpy.node.Node.get_parameter') as mock_get_param:
+            def side_effect(name):
+                if name == 'api_model':
+                    return rclpy.parameter.Parameter(
+                        'api_model',
+                        rclpy.Parameter.Type.STRING,
+                        'deepseek-chat'
+                    )
+                elif name == 'model_context_limit':
+                    return rclpy.parameter.Parameter(
+                        'model_context_limit',
+                        rclpy.Parameter.Type.INTEGER,
+                        0
+                    )
+                # Return standard mock for other params to prevent errors
+                return rclpy.parameter.Parameter(
+                    name,
+                    rclpy.Parameter.Type.STRING,
+                    ''
+                )
+            mock_get_param.side_effect = side_effect
+
+            node2 = LLMNode()
+            # Estimation for 'deepseek' should be 64000
+            assert node2.get_parameter('model_context_limit').value == 64000
+            node2.destroy_node()
