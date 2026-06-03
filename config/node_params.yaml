@@ -64,3 +64,12 @@
     
     # Directory for skills used by skill_tools
     skill_dir: './config/skills'
+
+    # The total context window size (limit) of the model in tokens.
+    model_context_limit: 8192
+
+    # Request usage details from the API in the stream options.
+    stream_options_include_usage: true
+
+    # Statistics publishing mode: 0 for completed only, 1 for all.
+    stats_mode: 0

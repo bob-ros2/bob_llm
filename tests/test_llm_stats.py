@@ -68,6 +68,9 @@ def test_stats_formatting_and_publishing(ros_init):
         ),
         rclpy.parameter.Parameter(
             'max_tokens', rclpy.Parameter.Type.INTEGER, 512
+        ),
+        rclpy.parameter.Parameter(
+            'stats_mode', rclpy.Parameter.Type.INTEGER, 1
         )
     ]
     node.set_parameters(params)
@@ -129,5 +132,44 @@ def test_stats_infinite_max_tokens(ros_init):
     called_msg = mock_pub.publish.call_args[0][0]
     data = json.loads(called_msg.data)
     assert 'Output: 120/∞' in data['formatted']
+
+    node.destroy_node()
+
+
+def test_stats_mode_filtering(ros_init):
+    """Test stats publishing filtering based on stats_mode parameter."""
+    with patch('bob_llm.llm_node.LLMNode.add_on_set_parameters_callback'):
+        node = LLMNode()
+
+    mock_pub = MagicMock()
+    node.pub_stats = mock_pub
+
+    # Case 1: stats_mode = 0 (default). Only publish 'completed'.
+    params = [
+        rclpy.parameter.Parameter(
+            'stats_mode', rclpy.Parameter.Type.INTEGER, 0
+        )
+    ]
+    node.set_parameters(params)
+
+    # Calling with 'generating' status should NOT publish
+    node._publish_stats(100, 10, 5.0, 'generating')
+    assert not mock_pub.publish.called
+
+    # Calling with 'completed' status SHOULD publish
+    node._publish_stats(100, 15, 6.0, 'completed')
+    assert mock_pub.publish.called
+    mock_pub.reset_mock()
+
+    # Case 2: stats_mode = 1. Publish all.
+    params_all = [
+        rclpy.parameter.Parameter(
+            'stats_mode', rclpy.Parameter.Type.INTEGER, 1
+        )
+    ]
+    node.set_parameters(params_all)
+
+    node._publish_stats(100, 10, 5.0, 'generating')
+    assert mock_pub.publish.called
 
     node.destroy_node()

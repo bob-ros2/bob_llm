@@ -242,6 +242,11 @@ class LLMNode(Node):
             ParameterType.PARAMETER_BOOL,
             'Request usage details from the API in the stream options.')
 
+        self._declare_param(
+            'stats_mode', 'LLM_STATS_MODE', 0,
+            ParameterType.PARAMETER_INTEGER,
+            'Statistics publishing mode: 0 for completed only, 1 for all.')
+
         # Initialize tiktoken for token estimation fallback
         try:
             import tiktoken
@@ -618,6 +623,10 @@ class LLMNode(Node):
         :param tokens_per_second: Rate of token generation.
         :param status: String representing the status ("generating", etc).
         """
+        stats_mode = self.get_parameter('stats_mode').value
+        if stats_mode == 0 and status != 'completed':
+            return
+
         context_limit = self.get_parameter('model_context_limit').value
         max_tokens_val = self.get_parameter('max_tokens').value
         max_tokens_str = str(max_tokens_val) if max_tokens_val > 0 else '∞'
@@ -1237,6 +1246,9 @@ class LLMNode(Node):
             elif (param.name == 'queue_size' and
                     param.type_ == Parameter.Type.INTEGER):
                 self.get_logger().info(f'Queue size set to {param.value}')
+            elif (param.name == 'stats_mode' and
+                    param.type_ == Parameter.Type.INTEGER):
+                self.get_logger().info(f'Stats mode set to {param.value}')
             elif param.name in ['system_prompt', 'system_prompt_file']:
                 system_prompt_updated = True
             elif param.name in [
