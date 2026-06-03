@@ -509,7 +509,7 @@ class LLMNode(Node):
             candidate_keys = [
                 'context_length', 'context_window', 'max_position_embeddings',
                 'max_position_embedding', 'context_len', 'context_size',
-                'max_tokens', 'max_ctx', 'ctx_len'
+                'max_tokens', 'max_ctx', 'ctx_len', 'n_ctx_train', 'n_ctx'
             ]
             for key in candidate_keys:
                 if key in d and isinstance(d[key], (int, float)) and d[key] > 0:
@@ -532,6 +532,10 @@ class LLMNode(Node):
                     limit = extract_limit(m)
                     if limit > 0:
                         break
+            if limit == 0 and models_data['data']:
+                first_model = models_data['data'][0]
+                if isinstance(first_model, dict):
+                    limit = extract_limit(first_model)
 
         return limit
 
