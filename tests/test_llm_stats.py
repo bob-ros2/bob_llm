@@ -17,10 +17,10 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from bob_llm.llm_node import LLMNode
-
 import pytest
 import rclpy
+
+from bob_llm.llm_node import LLMNode  # noqa: I100, I201
 
 
 @pytest.fixture
@@ -197,30 +197,27 @@ def test_auto_detection_and_estimation(ros_init):
 
         # Test Case 2: Failed API retrieval, falls back to estimation
         mock_query.return_value = 0
+        orig_get_param = rclpy.node.Node.get_parameter
         # Patch api_model parameter to return a deepseek name
-        with patch('rclpy.node.Node.get_parameter') as mock_get_param:
-            def side_effect(name):
-                if name == 'api_model':
-                    return rclpy.parameter.Parameter(
-                        'api_model',
-                        rclpy.Parameter.Type.STRING,
-                        'deepseek-chat'
-                    )
-                elif name == 'model_context_limit':
-                    return rclpy.parameter.Parameter(
-                        'model_context_limit',
-                        rclpy.Parameter.Type.INTEGER,
-                        0
-                    )
-                # Return standard mock for other params to prevent errors
-                return rclpy.parameter.Parameter(
-                    name,
-                    rclpy.Parameter.Type.STRING,
-                    ''
-                )
-            mock_get_param.side_effect = side_effect
 
+        def side_effect(self, name):
+            if name == 'api_model':
+                return rclpy.parameter.Parameter(
+                    'api_model',
+                    rclpy.Parameter.Type.STRING,
+                    'deepseek-chat'
+                )
+            elif name == 'model_context_limit':
+                return rclpy.parameter.Parameter(
+                    'model_context_limit',
+                    rclpy.Parameter.Type.INTEGER,
+                    0
+                )
+            return orig_get_param(self, name)
+
+        with patch('rclpy.node.Node.get_parameter', new=side_effect):
             node2 = LLMNode()
-            # Estimation for 'deepseek' should be 64000
-            assert node2.get_parameter('model_context_limit').value == 64000
-            node2.destroy_node()
+
+        # Estimation for 'deepseek' should be 64000
+        assert node2.get_parameter('model_context_limit').value == 64000
+        node2.destroy_node()

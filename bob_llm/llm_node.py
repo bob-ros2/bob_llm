@@ -89,6 +89,14 @@ class LLMNode(Node):
         self._cached_params[name] = val
         return val
 
+    def set_parameters(self, parameter_list):
+        """Set parameters and update cache."""
+        results = super().set_parameters(parameter_list)
+        for param, res in zip(parameter_list, results):
+            if res.successful:
+                self._cached_params[param.name] = param.value
+        return results
+
     def __init__(self):
         super().__init__('llm')
         self._cached_params = {}
