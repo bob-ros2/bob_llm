@@ -38,6 +38,11 @@ from rclpy.node import Node
 import requests
 from std_msgs.msg import String
 
+try:
+    import tiktoken
+except ImportError:
+    tiktoken = None
+
 
 class LLMNode(Node):
     """
@@ -80,10 +85,16 @@ class LLMNode(Node):
             final_value,
             ParameterDescriptor(type=param_type, description=description)
         )
-        return self.get_parameter(name).value
+        val = self.get_parameter(name).value
+        self._cached_params[name] = val
+        return val
 
     def __init__(self):
         super().__init__('llm')
+        self._cached_params = {}
+        self._token_cache = {}
+        self._log_data = None
+        self._last_log_file_path = None
         self.llm_client = None
 
         # Synchronize logging level with ROS logger verbosity for library output.
@@ -248,18 +259,17 @@ class LLMNode(Node):
             'Statistics publishing mode: 0 for completed only, 1 for all.')
 
         # Initialize tiktoken for token estimation fallback
-        try:
-            import tiktoken
-            api_model = self.get_parameter('api_model').value
+        if tiktoken is not None:
+            api_model = self._cached_params.get('api_model', '')
             try:
                 self._tokenizer = tiktoken.encoding_for_model(api_model)
             except Exception:
                 self._tokenizer = tiktoken.get_encoding('cl100k_base')
-        except ImportError:
+        else:
             self._tokenizer = None
 
         # Cloak API Key: Read from parameter, store in private variable, and clear parameter.
-        self._api_key = self.get_parameter('api_key').value
+        self._api_key = self._cached_params.get('api_key')
         if self._api_key and self._api_key != 'no_key':
             new_param = rclpy.parameter.Parameter('api_key', rclpy.Parameter.Type.STRING, '')
             self.set_parameters([new_param])
@@ -313,8 +323,8 @@ class LLMNode(Node):
 
     def _load_system_prompt(self):
         """Load the system prompt from parameter or file."""
-        system_prompt_file = self.get_parameter('system_prompt_file').value
-        system_prompt = self.get_parameter('system_prompt').value
+        system_prompt_file = self._cached_params.get('system_prompt_file')
+        system_prompt = self._cached_params.get('system_prompt')
 
         # Priority 1: system_prompt_file
         if system_prompt_file and os.path.isfile(system_prompt_file):
@@ -343,7 +353,7 @@ class LLMNode(Node):
         if system_prompt:
             self.chat_history.append({'role': 'system', 'content': system_prompt})
             self.get_logger().info('System prompt added.')
-        initial_messages_str = self.get_parameter('initial_messages_json').value
+        initial_messages_str = self._cached_params.get('initial_messages_json')
         try:
             initial_messages = json.loads(initial_messages_str)
             if isinstance(initial_messages, list):
@@ -364,9 +374,9 @@ class LLMNode(Node):
 
     def load_llm_client(self):
         """Load and configure the LLM client based on ROS parameters."""
-        api_type = self.get_parameter('api_type').value
-        api_url = self.get_parameter('api_url').value
-        model = self.get_parameter('api_model').value
+        api_type = self._cached_params.get('api_type')
+        api_url = self._cached_params.get('api_url')
+        model = self._cached_params.get('api_model')
 
         if not api_url:
             self.get_logger().error(
@@ -379,12 +389,12 @@ class LLMNode(Node):
         if api_type == 'openai_compatible':
 
             try:
-                stop = self.get_parameter('stop').value
+                stop = self._cached_params.get('stop')
             except Exception:
                 stop = None
 
             # Parse response_format if provided
-            response_format_str = self.get_parameter('response_format').value
+            response_format_str = self._cached_params.get('response_format')
             response_format = None
             if response_format_str:
                 try:
@@ -395,27 +405,27 @@ class LLMNode(Node):
                         f"Failed to parse 'response_format' JSON: {e}")
 
             self.llm_client = OpenAICompatibleClient(
-                api_url=self.get_parameter('api_url').value,
+                api_url=self._cached_params.get('api_url'),
                 api_key=self._api_key,
-                model=self.get_parameter('api_model').value,
+                model=self._cached_params.get('api_model'),
                 logger=self.get_logger(),
-                temperature=self.get_parameter('temperature').value,
-                top_p=self.get_parameter('top_p').value,
-                max_tokens=self.get_parameter('max_tokens').value,
+                temperature=self._cached_params.get('temperature'),
+                top_p=self._cached_params.get('top_p'),
+                max_tokens=self._cached_params.get('max_tokens'),
                 stop=stop,
-                presence_penalty=self.get_parameter('presence_penalty').value,
-                frequency_penalty=self.get_parameter(
+                presence_penalty=self._cached_params.get('presence_penalty'),
+                frequency_penalty=self._cached_params.get(
                     'frequency_penalty'
-                ).value,
-                timeout=self.get_parameter('api_timeout').value,
+                ),
+                timeout=self._cached_params.get('api_timeout'),
                 response_format=response_format,
-                stream_options_include_usage=self.get_parameter(
+                stream_options_include_usage=self._cached_params.get(
                     'stream_options_include_usage'
-                ).value
+                )
             )
 
             # Detect context limit if set to 0
-            context_limit = self.get_parameter('model_context_limit').value
+            context_limit = self._cached_params.get('model_context_limit')
             if context_limit == 0:
                 fetched_limit = self._query_api_for_model_info(api_url, model)
                 if fetched_limit > 0:
@@ -609,7 +619,7 @@ class LLMNode(Node):
         :return: A tuple containing (all_tools, all_functions).
         """
         try:
-            tool_modules_paths = self.get_parameter('tool_interfaces').value
+            tool_modules_paths = self._cached_params.get('tool_interfaces')
         except Exception:
             return [], {}
 
@@ -674,33 +684,50 @@ class LLMNode(Node):
             self.get_logger().error(f'Failed to serialize latest turn to JSON: {e}')
 
         # --- Log to file ---
-        log_file_path = self.get_parameter('message_log').value
+        log_file_path = self._cached_params.get('message_log')
         if not log_file_path:
             return
 
         try:
-            log_data = []
-            if os.path.exists(log_file_path) and os.path.getsize(log_file_path) > 0:
-                with open(log_file_path, 'r', encoding='utf-8') as f:
-                    log_data = json.load(f)
-                if not isinstance(log_data, list):
-                    self.get_logger().warning(
-                        f"Log file '{log_file_path}' contained invalid data. Overwriting.")
-                    log_data = []
+            if (self._log_data is None or
+                    self._last_log_file_path != log_file_path):
+                self._log_data = []
+                self._last_log_file_path = log_file_path
+                if (os.path.exists(log_file_path) and
+                        os.path.getsize(log_file_path) > 0):
+                    with open(log_file_path, 'r', encoding='utf-8') as f:
+                        try:
+                            data = json.load(f)
+                            if isinstance(data, list):
+                                self._log_data = data
+                            else:
+                                self.get_logger().warning(
+                                    f"Log file '{log_file_path}' contained "
+                                    'invalid data. Overwriting.'
+                                )
+                        except json.JSONDecodeError:
+                            self.get_logger().warning(
+                                f"Log file '{log_file_path}' contained "
+                                'invalid JSON. Overwriting.'
+                            )
 
-            if not log_data:
-                system_prompt = self.get_parameter('system_prompt').value
+            if not self._log_data:
+                system_prompt = self._cached_params.get('system_prompt')
                 if system_prompt:
-                    log_data.append({'role': 'system', 'content': system_prompt})
+                    self._log_data.append({
+                        'role': 'system', 'content': system_prompt
+                    })
 
-            log_data.append({'role': 'user', 'content': user_prompt})
-            log_data.append(assistant_message)
+            self._log_data.append({'role': 'user', 'content': user_prompt})
+            self._log_data.append(assistant_message)
 
             with open(log_file_path, 'w', encoding='utf-8') as f:
-                json.dump(log_data, f, indent=2)
+                json.dump(self._log_data, f, indent=2)
 
-        except (IOError, json.JSONDecodeError) as e:
-            self.get_logger().error(f"Error processing message log file '{log_file_path}': {e}")
+        except IOError as e:
+            self.get_logger().error(
+                f"Error processing message log file '{log_file_path}': {e}"
+            )
 
     def _get_truncated_history(self):
         """Return a copy of chat history with long strings truncated."""
@@ -731,30 +758,34 @@ class LLMNode(Node):
 
         Trims oldest turns after the prefix to stay within max_history_length.
         """
-        max_len = self.get_parameter('max_history_length').value
-        if max_len <= 0 or self._user_turns_count <= max_len:
-            return
+        max_len = self._cached_params.get('max_history_length')
+        if max_len > 0 and self._user_turns_count > max_len:
+            prefix = self.chat_history[:self._prefix_history_len]
+            conversation = self.chat_history[self._prefix_history_len:]
 
-        prefix = self.chat_history[:self._prefix_history_len]
-        conversation = self.chat_history[self._prefix_history_len:]
+            # Find the N-th user message from the back
+            user_turns_found = 0
+            trim_at = 0
 
-        # Find the N-th user message from the back
-        user_turns_found = 0
-        trim_at = 0
+            for i in range(len(conversation) - 1, -1, -1):
+                if conversation[i]['role'] == 'user':
+                    user_turns_found += 1
+                    if user_turns_found == max_len:
+                        trim_at = i
+                        break
 
-        for i in range(len(conversation) - 1, -1, -1):
-            if conversation[i]['role'] == 'user':
-                user_turns_found += 1
-                if user_turns_found == max_len:
-                    trim_at = i
-                    break
+            if user_turns_found >= max_len:
+                trimmed_conversation = conversation[trim_at:]
+                self.chat_history = prefix + trimmed_conversation
+                self.get_logger().info(
+                    f'Trimmed {self._user_turns_count - max_len} '
+                    'old turn(s) from chat history.'
+                )
+                self._user_turns_count = max_len
 
-        if user_turns_found >= max_len:
-            trimmed_conversation = conversation[trim_at:]
-            self.chat_history = prefix + trimmed_conversation
-            self.get_logger().info(
-                f'Trimmed {self._user_turns_count - max_len} old turn(s) from chat history.')
-            self._user_turns_count = max_len
+        self.get_logger().debug(
+            f'History: {str(self._get_truncated_history())}'
+        )
 
     def _get_message_text(self, content):
         """Extract text from message content (string or multimodal list)."""
@@ -787,8 +818,18 @@ class LLMNode(Node):
         """Count tokens in conversation history."""
         total_tokens = 0
         for msg in history:
+            msg_id = id(msg)
             content = msg.get('content', '')
-            total_tokens += self._count_tokens(self._get_message_text(content))
+            content_str = self._get_message_text(content)
+
+            cache_entry = self._token_cache.get(msg_id)
+            if cache_entry is None or cache_entry[0] != content_str:
+                token_cnt = self._count_tokens(content_str)
+                self._token_cache[msg_id] = (content_str, token_cnt)
+            else:
+                token_cnt = cache_entry[1]
+
+            total_tokens += token_cnt
             # Role overhead
             total_tokens += 4
         total_tokens += 3  # Final prompt overhead
@@ -809,12 +850,12 @@ class LLMNode(Node):
         :param tokens_per_second: Rate of token generation.
         :param status: String representing the status ("generating", etc).
         """
-        stats_mode = self.get_parameter('stats_mode').value
+        stats_mode = self._cached_params.get('stats_mode')
         if stats_mode == 0 and status != 'completed':
             return
 
-        context_limit = self.get_parameter('model_context_limit').value
-        max_tokens_val = self.get_parameter('max_tokens').value
+        context_limit = self._cached_params.get('model_context_limit')
+        max_tokens_val = self._cached_params.get('max_tokens')
         max_tokens_str = str(max_tokens_val) if max_tokens_val > 0 else '∞'
 
         if context_limit > 0:
@@ -908,7 +949,7 @@ class LLMNode(Node):
                     prompt_text_for_log = c
 
                 # Image processing
-                process_img = self.get_parameter('process_image_urls').value
+                process_img = self._cached_params.get('process_image_urls')
                 if process_img and 'image_url' in json_data:
                     user_content['content'] = self._process_image_url(
                         json_data['image_url'], json_data.get('content', '')
@@ -973,7 +1014,7 @@ class LLMNode(Node):
                 })))
 
                 # Execute tool with timeout
-                timeout = self.get_parameter('tool_timeout').value
+                timeout = self._cached_params.get('tool_timeout')
                 future = self._executor.submit(func_to_call, **args)
                 try:
                     result = future.result(timeout=timeout)
@@ -1264,7 +1305,7 @@ class LLMNode(Node):
     def prompt_callback(self, msg):
         """Handle incoming prompts via a non-blocking queue."""
         # --- Cancellation Check ---
-        stop_list = self.get_parameter('stop').value
+        stop_list = self._cached_params.get('stop')
         if msg.data in stop_list:
             if self._is_generating:
                 self.get_logger().warn(f"Cancellation requested: '{msg.data}'")
@@ -1303,9 +1344,9 @@ class LLMNode(Node):
                 self._trim_chat_history()
 
                 # 2. Main Generation Loop
-                stream_enabled = self.get_parameter('stream').value
-                max_calls = self.get_parameter('max_tool_calls').value
-                tool_choice = self.get_parameter('tool_choice').value
+                stream_enabled = self._cached_params.get('stream')
+                max_calls = self._cached_params.get('max_tool_calls')
+                tool_choice = self._cached_params.get('tool_choice')
                 tool_call_count = 0
                 consecutive_errors = 0
 
@@ -1372,7 +1413,7 @@ class LLMNode(Node):
 
                     if not tool_calls:
                         # Final turn (no tools)
-                        eof_str = self.get_parameter('eof').value
+                        eof_str = self._cached_params.get('eof')
                         if eof_str:
                             self.pub_stream.publish(String(data=eof_str))
 
@@ -1421,7 +1462,21 @@ class LLMNode(Node):
         system_prompt_updated = False
         client_params_updated = False
 
+        # Pre-validate response_format
         for param in params:
+            if param.name == 'response_format':
+                try:
+                    if param.value:
+                        json.loads(param.value)
+                except json.JSONDecodeError as e:
+                    result.successful = False
+                    result.reason = f'Invalid JSON for response_format: {e}'
+                    return result
+
+        # Update cache and check updates
+        for param in params:
+            self._cached_params[param.name] = param.value
+
             if param.name == 'stream' and param.type_ == Parameter.Type.BOOL:
                 self.get_logger().info(
                     f"Streaming {'enabled' if param.value else 'disabled'}")
@@ -1440,18 +1495,10 @@ class LLMNode(Node):
             elif param.name in [
                 'temperature', 'top_p', 'max_tokens', 'presence_penalty',
                 'frequency_penalty', 'api_timeout', 'stop', 'api_url',
-                'api_key', 'api_model', 'eof', 'stream_options_include_usage'
+                'api_key', 'api_model', 'eof', 'stream_options_include_usage',
+                'response_format'
             ]:
                 client_params_updated = True
-            elif param.name == 'response_format':
-                try:
-                    if param.value:
-                        json.loads(param.value)
-                    client_params_updated = True
-                except json.JSONDecodeError as e:
-                    result.successful = False
-                    result.reason = f'Invalid JSON for response_format: {e}'
-                    return result
 
         if system_prompt_updated:
             new_prompt = self._load_system_prompt()
@@ -1485,8 +1532,7 @@ class LLMNode(Node):
                         param.value.rstrip('/') + '/chat/completions')
                 elif param.name == 'api_model':
                     self.llm_client.model = param.value
-                    try:
-                        import tiktoken
+                    if tiktoken is not None:
                         try:
                             self._tokenizer = tiktoken.encoding_for_model(
                                 param.value
@@ -1495,7 +1541,7 @@ class LLMNode(Node):
                             self._tokenizer = tiktoken.get_encoding(
                                 'cl100k_base'
                             )
-                    except ImportError:
+                    else:
                         self._tokenizer = None
                 elif param.name == 'stream_options_include_usage':
                     self.llm_client.stream_options_include_usage = param.value

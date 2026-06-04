@@ -165,6 +165,7 @@ ros2 topic pub /llm_prompt std_msgs/msg/String "data: '{\"role\": \"user\", \"co
 | `/llm_reasoning` | `std_msgs/msg/String` | **(Published)** Live reasoning/thinking content from the model. |
 | `/llm_tool_calls` | `std_msgs/msg/String` | **(Published)** JSON info about tool execution for clients. |
 | `/llm_latest_turn`| `std_msgs/msg/String` | **(Published)** Latest turn as JSON array of messages. |
+| `/llm_stats` | `std_msgs/msg/String` | **(Published)** Execution stats like token count and generation speed. |
 
 
 ## Configuration
@@ -179,20 +180,28 @@ The node is configured through a ROS parameters YAML file. Most parameters suppo
 | `api_model` | string | `""` | The specific model name to use (e.g., 'gpt-4', 'llama3'). [ENV: LLM_API_MODEL] |
 | `system_prompt` | string | `""` | The system prompt to set the LLM context. [ENV: LLM_SYSTEM_PROMPT] |
 | `system_prompt_file` | string | `""` | Path to a file containing the system prompt. [ENV: LLM_SYSTEM_PROMPT_FILE] |
+| `initial_messages_json` | string | `[]` | A JSON string of initial messages for few-shot prompting. [ENV: LLM_INITIAL_MESSAGES_JSON] |
 | `max_history_length` | integer | `10` | Max turns to keep in history. [ENV: LLM_MAX_HISTORY_LENGTH] Range: [0, 1000] |
 | `max_tool_calls` | integer | `5` | Max consecutive tool calls allowed. [ENV: LLM_MAX_TOOL_CALLS] Range: [0, 50] |
 | `stream` | bool | `true` | Enable/disable streaming for the final LLM response. [ENV: LLM_STREAM] |
 | `temperature` | double | `0.7` | Controls the randomness of the output. [ENV: LLM_TEMPERATURE] Range: [0.0, 2.0] |
 | `top_p` | double | `1.0` | Nucleus sampling diversity control. [ENV: LLM_TOP_P] Range: [0.0, 1.0] |
 | `max_tokens` | integer | `0` | Max tokens to generate. 0 means no limit. [ENV: LLM_MAX_TOKENS] |
+| `stop` | string array | `['stop_llm']` | A list of sequences to stop generation at. [ENV: LLM_STOP] |
 | `presence_penalty` | double | `0.0` | Penalizes new tokens based on presence. [ENV: LLM_PRESENCE_PENALTY] Range: [-2.0, 2.0]|
 | `frequency_penalty`| double | `0.0` | Penalizes new tokens based on frequency. [ENV: LLM_FREQUENCY_PENALTY] Range: [-2.0, 2.0]|
+| `api_timeout` | double | `120.0` | Timeout in seconds for API requests. [ENV: LLM_API_TIMEOUT] |
 | `tool_interfaces` | string array | `[]` | A list of Python modules or file paths to load as tools. [ENV: LLM_TOOL_INTERFACES] |
 | `skill_dir` | string | `./config/skills` | Directory where skills are stored. Supports a comma-separated list of paths for dual-loading. [ENV: LLM_SKILL_DIR] |
 | `message_log` | string | `""` | If set, appends conversation turns to this JSON file. [ENV: LLM_MESSAGE_LOG] |
+| `process_image_urls` | bool | `false` | If true, processes image_url in JSON prompts. [ENV: LLM_PROCESS_IMAGE_URLS] |
 | `response_format` | string | `""` | JSON string defining the output format. [ENV: LLM_RESPONSE_FORMAT] |
+| `tool_choice` | string | `auto` | Tool calling behavior ('auto', 'none', 'required'). [ENV: LLM_TOOL_CHOICE] |
 | `tool_timeout` | double | `60.0` | Maximum time in seconds to wait for a tool to execute. [ENV: LLM_TOOL_TIMEOUT] |
 | `eof` | string | `""` | Optional string to publish on llm_stream when generation is finished. [ENV: LLM_EOF] |
+| `model_context_limit` | integer | `0` | The total context window size (limit) of the model in tokens. [ENV: LLM_MODEL_CONTEXT_LIMIT] |
+| `stream_options_include_usage` | bool | `true` | Request usage details from the API in the stream options. [ENV: LLM_STREAM_OPTIONS_INCLUDE_USAGE] |
+| `stats_mode` | integer | `0` | Statistics publishing mode: 0 for completed only, 1 for all. [ENV: LLM_STATS_MODE] |
 
 ### Security Note: API Key Cloaking
 

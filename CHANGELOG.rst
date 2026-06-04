@@ -5,6 +5,7 @@ Changelog for package bob_llm
 
 1.0.3 (2026-04-30)
 ------------------
+* Reduce read/write overhead, lookups inside loops/callbacks etc.
 * Add statistics publishing on llm_stats topic.
 * Fix missing tool docstring issue.
 * Refactor monolithic prompt processing into event-driven architecture (removed polling timer).
