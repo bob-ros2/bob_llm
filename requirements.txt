@@ -4,3 +4,5 @@ qdrant-client
 # When using chat_node.py
 prompt_toolkit
 rich
+# For precise token counting
+tiktoken
