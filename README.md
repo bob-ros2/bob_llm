@@ -4,14 +4,14 @@
 
 # ROS Package [bob_llm](https://github.com/bob-ros2/bob_llm)
 
-The `bob_llm` package provides a ROS 2 node (`llm node`) that acts as a powerful interface to an external Large Language Model (LLM). It operates as a stateful service that maintains a conversation, connects to any OpenAI-compatible API, and features a robust tool execution system.
+The `bob_llm` package provides a ROS 2 node (`llm node`) that acts as an autonomous AI agent. Rather than just wrapping an external Large Language Model (LLM) API, the node implements a complete runtime environment for agentic workflows. It manages conversational state, integrates standard tool calls, and hosts a dynamic skill execution engine capable of discovering, loading, and executing self-contained skills at runtime.
 
 ## Features
 
 -   **OpenAI-Compatible:** Connects to any LLM backend that exposes an OpenAI-compatible API endpoint (e.g., `Ollama`, `vLLM`, `llama-cpp-python`, commercial APIs).
 -   **Stateful Conversation:** Maintains chat history to provide conversational context to the LLM.
--   **Dynamic Tool System:** Dynamically loads Python functions from user-provided files and makes them available to the LLM. The LLM can request to call these functions to perform actions or gather information.
--   **Anthropic Agent Skills:** Full support for the [Anthropic Agent Skills](https://agentskills.io) specification, enabling modular, self-contained capabilities with documentation and execution logic.
+-   **Dynamic Tool System:** Dynamically loads Python functions from user-provided modules and exposes them to the LLM. The model can selectively trigger these tools to execute shell scripts, interface with Qdrant vector databases, or control local hardware.
+-   **Autonomous Skill Execution:** Implements the [Anthropic Agent Skills](https://agentskills.io) standard, allowing the agent to dynamically discover available skills, inspect their implementation (`SKILL.md`), write new scripts (`.sh` or `.py`), and execute them in a multi-directory configuration (separating protected core skills from writable user sandboxes).
 -   **High Performance Streaming:** Optimized byte-stream parsing ensures zero-latency delivery of reasoning tokens and response chunks directly from the socket (no internal buffering).
 -   **Reasoning/Thinking Support:** Real-time extraction and publishing of model reasoning (e.g., from Gemma 2 or DeepSeek) to a dedicated topic.
 -   **Interactive Chat CLI:** Includes a premium terminal interface with Markdown rendering and multi-line support.
