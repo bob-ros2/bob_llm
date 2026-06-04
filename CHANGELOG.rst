@@ -13,7 +13,7 @@ Changelog for package bob_llm
 * Add robust stream recovery with automatic retry for failed API connections.
 * Implement token buffering for smoother streaming and reduced ROS message overhead.
 * Integrate ThreadPoolExecutor for isolated tool execution with configurable timeouts.
-* Add `tool_timeout` parameter (default 60s) for robust skill execution.
+* Add tool_timeout parameter (default 60s) for robust skill execution.
 * Improve multimodal content preservation (images) and smart text extraction for logging.
 * Refine tool budgeting to count only successful calls against the limit.
 * Add clean node shutdown logic with executor and thread cleanup.
@@ -23,7 +23,6 @@ Changelog for package bob_llm
 * Fix UTF-8 encoding for special characters in raw byte streams.
 * Optimize chat UI refresh rate for better human perception.
 * Integrate tool call detection in reasoning stream for faster response.
-* Restore 100% flake8/PEP8 compliance and single quote enforcement.
 * Refactor main interaction loop for robust synchronous execution.
 * Fix JSON prompt handling and enhance system prompt file support.
 * Add support for dynamic system_prompt_file parameter loading.
