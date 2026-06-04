@@ -458,12 +458,31 @@ class LLMNode(Node):
         if self._api_key and self._api_key != 'no_key':
             headers['Authorization'] = f'Bearer {self._api_key}'
 
+        props_url = base_url.rsplit('/v1', 1)[0] + '/props'
         models_list_url = f'{base_url}/models'
         model_detail_url = f'{base_url}/models/{model_name}'
 
+        props_data = None
         models_data = None
         model_detail = None
         limit = 0
+
+        # Try fetching llama.cpp props
+        try:
+            r = requests.get(props_url, headers=headers, timeout=5.0)
+            if r.status_code == 200:
+                props_data = r.json()
+                self.get_logger().debug(
+                    f'Fetched API Props: {json.dumps(props_data)}'
+                )
+            else:
+                self.get_logger().debug(
+                    f'Props endpoint /props returned HTTP {r.status_code}'
+                )
+        except Exception as e:
+            self.get_logger().debug(
+                f'Failed to retrieve props from {props_url}: {e}'
+            )
 
         # Try fetching model list
         try:
@@ -509,7 +528,7 @@ class LLMNode(Node):
             candidate_keys = [
                 'context_length', 'context_window', 'max_position_embeddings',
                 'max_position_embedding', 'context_len', 'context_size',
-                'max_tokens', 'max_ctx', 'ctx_len', 'n_ctx_train', 'n_ctx'
+                'max_tokens', 'max_ctx', 'ctx_len', 'n_ctx', 'n_ctx_train'
             ]
             for key in candidate_keys:
                 if key in d and isinstance(d[key], (int, float)) and d[key] > 0:
@@ -521,7 +540,9 @@ class LLMNode(Node):
                         return nested
             return 0
 
-        if model_detail:
+        if props_data:
+            limit = extract_limit(props_data)
+        if limit == 0 and model_detail:
             limit = extract_limit(model_detail)
         if (
             limit == 0 and models_data and
