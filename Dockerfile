@@ -40,7 +40,7 @@ RUN source /opt/ros/${ROS_DISTRO}/setup.bash && \
 
 # -- Entrypoint Script --
 USER root
-RUN echo "#!/bin/bash\nsource /opt/ros/\${ROS_DISTRO}/setup.bash\nsource /ros2_ws/install/setup.bash\nexec \"\$@\"" > /ros_entrypoint.sh \
+RUN printf '#!/bin/bash\nsource /opt/ros/${ROS_DISTRO}/setup.bash\nsource /ros2_ws/install/setup.bash\nexec "$@"\n' > /ros_entrypoint.sh \
     && chmod +x /ros_entrypoint.sh
 
 USER ros
