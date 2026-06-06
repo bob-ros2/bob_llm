@@ -46,4 +46,4 @@ RUN printf '#!/bin/bash\nsource /opt/ros/${ROS_DISTRO}/setup.bash\nsource /ros2_
 USER ros
 ENTRYPOINT ["/ros_entrypoint.sh"]
 
-CMD ["ros2", "run", "bob_llm", "llm_node"]
+CMD ["ros2", "run", "bob_llm", "llm"]
