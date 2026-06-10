@@ -87,8 +87,7 @@ class BobChatClient(Node):
         self.last_stream_time = 0.0
         self.last_ui_update_time = 0.0
         self.ui_update_rate_limit = 0.1  # Max 10 FPS (1/0.1)
-        self.stream_completed = False  # Guards against orphan stream tokens arriving
-                                       # after response_callback has already fired
+        self.stream_completed = False  # Guards against orphan stream tokens arriving after response_callback has already fired
 
     def _update_live_display(self, force=False):
         if not self.live:
