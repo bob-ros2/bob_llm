@@ -87,6 +87,8 @@ class BobChatClient(Node):
         self.last_stream_time = 0.0
         self.last_ui_update_time = 0.0
         self.ui_update_rate_limit = 0.1  # Max 10 FPS (1/0.1)
+        self.stream_completed = False  # Guards against orphan stream tokens arriving
+                                       # after response_callback has already fired
 
     def _update_live_display(self, force=False):
         if not self.live:
@@ -120,6 +122,12 @@ class BobChatClient(Node):
             self.live.update(Group(*parts), refresh=True)
 
     def stream_callback(self, msg):
+        # Ignore orphan stream tokens that arrive after response_callback
+        # has already fired. This prevents stale tokens from leaking into
+        # the next conversation turn.
+        if self.stream_completed:
+            return
+
         self.last_stream_time = time.time()
         chunk = msg.data
         if not self.is_receiving:
@@ -156,7 +164,7 @@ class BobChatClient(Node):
         self._update_live_display()
 
     def response_callback(self, msg):
-        # ...
+        # Mark turn as complete so any late-arriving stream tokens are ignored
         if self.is_receiving or self.is_reasoning:
             if self.live:
                 # Force one final update to ensure everything is rendered
@@ -165,6 +173,7 @@ class BobChatClient(Node):
                 self.live = None
             self.is_receiving = False
             self.is_reasoning = False
+            self.stream_completed = True
             self.console.print('')
         self.waiting_for_response = False
 
@@ -192,6 +201,14 @@ class BobChatClient(Node):
             self.get_logger().error(f'Failed to parse tool call message: {e}')
 
     def send_prompt(self, text):
+        # Reset state for a new conversation turn so fresh stream tokens
+        # are accepted and stale content is cleared.
+        self.stream_completed = False
+        self.full_content = ''
+        self.full_reasoning = ''
+        if self.live:
+            self.live.stop()
+            self.live = None
         msg = String()
         msg.data = text
         self.pub_prompt.publish(msg)
